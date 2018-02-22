@@ -1,4 +1,4 @@
-# dumper
+# go-dump
 
 
-mydumper in go 
+mydumper in go
