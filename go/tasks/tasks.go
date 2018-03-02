@@ -1,3 +1,4 @@
+// Package tasks is a package to handle all the tasks
 package tasks
 
 import (

@@ -1,15 +1,15 @@
 package sqlutils
 
 import (
-	"github.com/outbrain/golib/log"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
-)
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/outbrain/golib/log"
+)
 
 func NewTable(schema string, name string, db *sql.DB) *Table {
 
-  query := `SELECT
+	query := `SELECT
 		COLUMN_NAME,
 		ORDINAL_POSITION,
 		COLUMN_DEFAULT,
@@ -26,25 +26,24 @@ func NewTable(schema string, name string, db *sql.DB) *Table {
 		EXTRA
 	 FROM information_schema.columns WHERE table_schema=? AND table_name=? ORDER BY ORDINAL_POSITION`
 
-  rows, err := db.Query(query, schema, name)
+	rows, err := db.Query(query, schema, name)
 
-
-  if err != nil && err != sql.ErrNoRows {
-  	return nil
-  }
+	if err != nil && err != sql.ErrNoRows {
+		return nil
+	}
 
 	var columns []*Column
 	columnsOrdinals := make(map[string]int)
 	var pk *Column
 
-  for rows.Next() {
+	for rows.Next() {
 		column := new(Column)
 		temp := make([]interface{}, 4)
 		err := rows.Scan(&column.Name, &column.OrdinalPosition, &column.Default, &temp[0],
-			  &column.DataType, &column.CharacterMaxLength, &column.CharacterOctetLength,
-			  &column.NumericPrecision, &column.NumericScale, &column.DateTimePrecision,
-			  &column.CharacterSetName, &column.CollationName, &column.ColumnKey,
-			  &column.Extra)
+			&column.DataType, &column.CharacterMaxLength, &column.CharacterOctetLength,
+			&column.NumericPrecision, &column.NumericScale, &column.DateTimePrecision,
+			&column.CharacterSetName, &column.CollationName, &column.ColumnKey,
+			&column.Extra)
 
 		if temp[0] == "YES" {
 			column.IsNullable = true
@@ -60,28 +59,30 @@ func NewTable(schema string, name string, db *sql.DB) *Table {
 			log.Fatal("error", err.Error())
 		}
 		columns = append(columns, column)
+
 		columnsOrdinals[column.Name] = column.OrdinalPosition - 1
-  }
+	}
 
+	table := &Table{
+		Name:            name,
+		Schema:          schema,
+		Columns:         columns,
+		ColumnsOrdinals: columnsOrdinals,
+		PrimaryKey:      pk,
+	}
 
-
-  table := &Table{
-    Name:         		name,
-    Schema:       		schema,
-		Columns:					columns,
-		ColumnsOrdinals: 	columnsOrdinals,
-		PrimaryKey:				pk,
-  }
-
-  return table
+	return table
 }
 
 func RowToArray(rows *sql.Rows, columns []*Column) []NullFieldData {
 	buff := make([]interface{}, len(columns))
 	data := make([]NullFieldData, len(columns))
+	//data := make([]interface{}, len(columns))
+	//var data []interface{}
+
 	for i, _ := range buff {
-    data[i].column = columns[i]
-    buff[i] = &data[i]
+		data[i].column = columns[i]
+		buff[i] = &data[i]
 	}
 	rows.Scan(buff...)
 	return data
