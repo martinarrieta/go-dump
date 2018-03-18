@@ -27,7 +27,7 @@ type TaskManager struct {
 	tasksPool              []*Task
 	WorkersTx              []*sql.Tx
 	WorkersDB              []*sql.DB
-	TotalChunks            int
+	TotalChunks            int64
 	DestinationDir         string
 }
 
