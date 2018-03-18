@@ -103,7 +103,13 @@ func main() {
 
 	runtime.GOMAXPROCS(dumpOptions.Threads)
 
-	taskManager := tasks.NewTaskManager(&wgCreateChunks, &wgProcessChunks, cDataChunk, GetMySQLConnection(), dumpOptions.Threads, dumpOptions.DestinationDir)
+	taskManager := tasks.NewTaskManager(
+		&wgCreateChunks,
+		&wgProcessChunks,
+		cDataChunk,
+		GetMySQLConnection(),
+		dumpOptions.Threads,
+		dumpOptions.DestinationDir)
 
 	dbtm := GetMySQLConnection()
 

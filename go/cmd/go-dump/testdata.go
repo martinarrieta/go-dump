@@ -25,11 +25,11 @@ func main() {
 
 	table := sqlutils.NewTable(tableSchema, tableName, db)
 
-	//log.Debugf("%+v", table)
+	log.Debugf("%+v", table)
 
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s LIMIT 100", tableSchema, tableName))
+	query := fmt.Sprintf("SELECT * FROM %s.%s LIMIT 1000", tableSchema, tableName)
 
-	log.Debugf(" - Columns: %+v", table.Columns[1])
+	rows, err := db.Query(query)
 
 	if err != nil {
 		log.Error(err.Error())

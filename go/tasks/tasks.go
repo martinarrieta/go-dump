@@ -42,8 +42,9 @@ func (this *Task) CreateChunks(db *sql.DB){
 
   for stopLoop == false {
 
-    query := fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 OFFSET %d",
-      this.Table.GetPrimaryKeyName(), this.Table.GetSchameAndTable(), this.Table.GetPrimaryKeyName(), chunkMax, offset)
+    query := GetChunkSqlQuery( this.Table, chunkMax, offset )
+     := fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 OFFSET %d",
+      this.Table.PrimaryKey.Name, this.Table.GetSchameAndTable(), this.Table.PrimaryKey.Name, chunkMax, offset)
 
 
     err := tx.QueryRow(query).Scan(&chunkMax)
