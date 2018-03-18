@@ -77,7 +77,7 @@ func main() {
 	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "password", "", "MySQL password")
 	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use")
 	flag.IntVar(&dumpOptions.MaxProcess, "max-process", 1, "Maximum number of process")
-	flag.IntVar(&dumpOptions.ChunkSize, "chunk-size", 1000, "Chunk size to get the rows")
+	flag.Int64(&dumpOptions.ChunkSize, "chunk-size", 1000, "Chunk size to get the rows")
 	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000, "Task channel buffer size")
 	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true, "Lock tables to get consistent backup")
 	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Lock tables to get consistent backup")
