@@ -1,17 +1,19 @@
 package sqlutils
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
+	"strconv"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type RowsParser struct {
 	Rows    *sql.Rows
-	columns map[int]Column
+	columns map[int]*sql.ColumnType
 	Table   *Table
 }
 
@@ -21,36 +23,57 @@ func NewRowsParser(rows *sql.Rows, table *Table) *RowsParser {
 
 func (this *RowsParser) Parse(file *os.File) error {
 
-	defer this.Rows.Close()
-
-	buff := make([]interface{}, len(this.Table.Columns))
-	data := make([]NullFieldData, len(this.Table.Columns))
+	columns, _ := this.Rows.ColumnTypes()
+	buff := make([]interface{}, len(columns))
+	data := make([]interface{}, len(columns))
 	for i, _ := range buff {
-		data[i].Column = this.Table.Columns[i]
 		buff[i] = &data[i]
 	}
-
-	var rowsData []string
-	var rowData []string
-
-	rowCount := 0
+	buffer := bufio.NewWriter(file)
+	firstRow := true
+	var err error
+	buffer.WriteString(fmt.Sprintf("INSERT INTO %s VALUES \n(", this.Table.GetEscapedFullName()))
 	for this.Rows.Next() {
-		if err := this.Rows.Scan(buff...); err != nil {
-			panic(err)
+
+		err = this.Rows.Scan(buff...)
+
+		if err != nil {
+			panic(err.Error()) // proper error handling instead of panic in your app
+		}
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+		if firstRow == false {
+			buffer.WriteString("),\n(")
+		} else {
+			firstRow = false
 		}
 
-		rowData = rowData[:0]
-		for _, val := range data {
-			rowData = append(rowData, string(val.MarshalJSON()))
+		max := len(data)
+		for i, d := range data {
+
+			switch d.(type) {
+			case []byte:
+				buffer.Write([]byte("'"))
+				buffer.Write(parseString(d))
+				buffer.Write([]byte("'"))
+			case int64:
+				buffer.WriteString(strconv.FormatInt(d.(int64), 10))
+			case nil:
+				buffer.Write([]byte("NULL"))
+			case time.Time:
+				buffer.WriteString(d.(time.Time).Format("2009-09-08 03:05:30.000000"))
+			default:
+				buffer.Write(d.([]byte))
+			}
+			if i != max-1 {
+				buffer.Write([]byte(","))
+			}
 		}
-		rowCount++
-		rowsData = append(rowsData, fmt.Sprint("(", strings.Join(rowData, ","), ")"))
 	}
-	fmt.Fprintln(file, fmt.Sprintf("INSERT INTO %s VALUES", this.Table.Name))
-	fmt.Fprintln(file, strings.Join(rowsData, ","), ";")
-
+	buffer.WriteString(");\n")
+	buffer.Flush()
 	return nil
-
 }
 
 func (this *RowsParser) Close() {
