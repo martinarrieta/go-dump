@@ -76,18 +76,27 @@ func (this *TaskManager) lockTable(task *Task) error {
 func (this *TaskManager) GetTransactions(lockTables bool) {
 
 	db := this.DB
+	var startLocking time.Time
 
-	for _, task := range this.tasksPool {
-		if err := this.lockTable(task); err != nil {
-			log.Fatalf("Error locking table: %s", err.Error())
+	if lockTables == true {
+		log.Infof("Locking tables to get a consistent backup.")
+		startLocking = time.Now()
+
+		for _, task := range this.tasksPool {
+			if err := this.lockTable(task); err != nil {
+				log.Fatalf("Error locking table: %s", err.Error())
+			}
 		}
 	}
+
 	log.Debug("Starting workers")
 	for i, dbW := range this.WorkersDB {
 		log.Debugf("Starting worker %d", i)
 		if this.WorkersTx[i] == nil {
+			//"START TRANSACTION /*!40108 WITH CONSISTENT SNAPSHOT */"
+
 			txW, _ := dbW.Begin()
-			//stm, _ := txW.Prepare("SELECT id FROM panel_socialtools_dev.campaign_collectedmessagecampaignword LIMIT 1")
+			//stm, _ := txW.Prepare("SELECT * FROM mysql.user LIMIT 1")
 			//_ = stm.QueryRow().Scan()
 			this.WorkersTx[i] = txW
 		}
@@ -95,7 +104,13 @@ func (this *TaskManager) GetTransactions(lockTables bool) {
 	log.Debugf("Added %d transactions", len(this.WorkersDB))
 
 	log.Debugf("Unlocking tables")
-	db.Exec("UNLOCK TABLES")
+	if lockTables == true {
+		db.Exec("UNLOCK TABLES")
+		lockedTime := time.Since(startLocking)
+		log.Infof("Unlocking the tables. Tables were locked for %s", lockedTime)
+	}
+	log.Infof("Locking tables to get a consistent backup.")
+
 }
 
 func (this *TaskManager) StartWorkers() error {
@@ -183,131 +198,4 @@ func (this *TaskManager) CreateChunks() {
 	for _, t := range this.tasksPool {
 		go t.CreateChunks(this.DB)
 	}
-}
-
-type Task struct {
-	Table       *sqlutils.Table
-	ChunkSize   int64
-	TaskManager *TaskManager
-	Tx          *sql.Tx
-	DB          *sql.DB
-	Id          int64
-}
-
-func (this *Task) CreateChunks(db *sql.DB) {
-	log.Debug("Adding 1 to waitgroup CreateChunksWaitGroup")
-	this.TaskManager.CreateChunksWaitGroup.Add(1)
-	log.Debug("Added 1 to waitgroup CreateChunksWaitGroup")
-
-	var (
-		tx, _       = db.Begin()
-		offset      = this.ChunkSize
-		chunkMax    = int64(0)
-		chunkMin    = int64(0)
-		chunkNumber = int64(0)
-		stopLoop    = false
-	)
-
-	defer func() {
-		log.Debug("Done with 1 to waitgroup CreateChunksWaitGroup")
-		this.TaskManager.CreateChunksWaitGroup.Done()
-		log.Debug("Passed Done with 1 to waitgroup CreateChunksWaitGroup")
-	}()
-
-	if len(this.Table.PrimaryKey) == 0 {
-		switch this.TaskManager.TablesWithoutPKOption {
-		case "single-chunk":
-			log.Debugf("Table %s doesn't have a primary key, we will make it in a single chunk.", this.Table.GetFullName())
-			this.TaskManager.ChunksChannel <- NewSingleDataChunk(this)
-			chunkNumber = 1
-		case "error":
-			log.Fatalf("The table %s doesn't have a primary key and the --tables-without-pk is \"error\"", this.Table.GetFullName())
-		}
-	} else {
-		for stopLoop == false {
-			query := sqlutils.GetChunkSqlQuery(this.Table, chunkMax, offset)
-			log.Debugf("Query: %s", query)
-			err := tx.QueryRow(query).Scan(&chunkMax)
-			if err != nil {
-				if err == sql.ErrNoRows {
-					err := tx.QueryRow(query).Scan(&chunkMin)
-					if err == nil {
-						chunkNumber = chunkNumber + 1
-						chunkMax = chunkMin + this.ChunkSize
-						this.TaskManager.ChunksChannel <- NewDataChunk(chunkMin, chunkMax, chunkNumber, this)
-					}
-					stopLoop = true
-				} else {
-					log.Fatalf("Panic GenerateChunks: %s", err.Error())
-				}
-			} else {
-				chunkNumber = chunkNumber + 1
-				this.TaskManager.TotalChunks += 1
-				this.TaskManager.ChunksChannel <- NewDataChunk(chunkMin, chunkMax, chunkNumber, this)
-				chunkMin = chunkMax + 1
-			}
-		}
-		if chunkNumber == 0 {
-			this.TaskManager.ChunksChannel <- NewDataChunk(0, offset, chunkNumber, this)
-		}
-	}
-	log.Infof("Table processed %s - %d chunks created", this.Table.GetFullName(), chunkNumber)
-}
-
-func NewTask(schema string,
-	table string,
-	chunkSize int64,
-	db *sql.DB,
-	tm *TaskManager) Task {
-	return Task{
-		Table:       sqlutils.NewTable(schema, table, db),
-		ChunkSize:   chunkSize,
-		DB:          db,
-		TaskManager: tm}
-}
-
-/// DataChunk
-
-type DataChunk struct {
-	Min           int64
-	Max           int64
-	Sequence      int64
-	Task          *Task
-	IsSingleChunk bool
-}
-
-func (c DataChunk) GetWhereSQL() string {
-	return fmt.Sprintf("%s BETWEEN ? AND ?", c.Task.Table.PrimaryKey)
-}
-
-func (c DataChunk) GetPrepareSQL() string {
-	if c.IsSingleChunk == true {
-		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s",
-			c.Task.Table.Schema, c.Task.Table.Name)
-	} else {
-		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s WHERE %s",
-			c.Task.Table.Schema, c.Task.Table.Name, c.GetWhereSQL())
-	}
-}
-
-func (c DataChunk) GetSampleSQL() string {
-	return fmt.Sprintf("SELECT * FROM %s.%s LIMIT 1", c.Task.Table.Schema, c.Task.Table.Name)
-}
-
-func NewSingleDataChunk(task *Task) DataChunk {
-	return DataChunk{
-		Sequence:      1,
-		Task:          task,
-		IsSingleChunk: true}
-
-}
-
-func NewDataChunk(chunkMin int64, chunkMax int64, chunkNumber int64, task *Task) DataChunk {
-	return DataChunk{
-		Min:           chunkMin,
-		Max:           chunkMax,
-		Sequence:      chunkNumber,
-		Task:          task,
-		IsSingleChunk: false}
-
 }

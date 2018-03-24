@@ -64,12 +64,10 @@ func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
 	if err != nil {
 		log.Error(err.Error())
 	}
-	log.Debug("Prepare")
 
 	defer stmt.Close()
 
 	rows, err := stmt.Query()
-	log.Debug("Query")
 
 	if err != nil {
 		log.Error(err.Error())

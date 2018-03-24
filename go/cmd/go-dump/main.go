@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/martinarrieta/go-dump/go/sqlutils"
@@ -32,6 +34,7 @@ var wgCreateChunks sync.WaitGroup
 // WaitGroup to process the chunks
 var wgProcessChunks sync.WaitGroup
 
+// GetMySQLConnection return the string to connect to the mysql server
 func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) *sql.DB {
 	var hoststring, userpass string
 
@@ -50,14 +53,6 @@ func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) *sql.DB 
 	return db
 }
 
-func GetMySQLCredentials() *MySQLCredentials {
-	return &MySQLCredentials{}
-}
-
-func GetMySQLHost() *MySQLHost {
-	return &MySQLHost{}
-}
-
 type DumpOptions struct {
 	Tables                string
 	MySQLHost             *MySQLHost
@@ -65,7 +60,6 @@ type DumpOptions struct {
 	Threads               int
 	ChunkSize             int64
 	ChannelBufferSize     int
-	MaxProcess            int
 	LockTables            bool
 	Debug                 bool
 	TablesWithoutPKOption string
@@ -74,8 +68,8 @@ type DumpOptions struct {
 
 func GetDumpOptions() *DumpOptions {
 	return &DumpOptions{
-		MySQLHost:        GetMySQLHost(),
-		MySQLCredentials: GetMySQLCredentials(),
+		MySQLHost:        new(MySQLHost),
+		MySQLCredentials: new(MySQLCredentials),
 	}
 }
 
@@ -84,29 +78,44 @@ func main() {
 	var flagTables, flagDatabases string
 	dumpOptions := GetDumpOptions()
 
-	flag.StringVar(&flagTables, "tables", "", "Tables to dump")
-	flag.StringVar(&flagDatabases, "databases", "", "Databases to dump")
+	flag.StringVar(&flagTables, "tables", "", "List of comma separated tables to dump.\nEach table should have the database name included, for example \"mydb.mytable,mydb2.mytable2\"")
+	flag.StringVar(&flagDatabases, "databases", "", "List of comma separated databases to dump")
 	flag.StringVar(&dumpOptions.MySQLHost.HostName, "host", "localhost", "MySQL hostname")
 	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "socket", "", "MySQL socket file")
 	flag.IntVar(&dumpOptions.MySQLHost.Port, "port", 3306, "MySQL port number")
-	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "root", "MySQL user name")
+	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "", "MySQL user name")
 	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "password", "", "MySQL password")
 	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use")
-	flag.IntVar(&dumpOptions.MaxProcess, "max-process", 1, "Maximum number of process")
 	flag.Int64Var(&dumpOptions.ChunkSize, "chunk-size", 1000, "Chunk size to get the rows")
 	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000, "Task channel buffer size")
 	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true, "Lock tables to get consistent backup")
-	flag.StringVar(&dumpOptions.TablesWithoutPKOption, "tables-without-pk", "error", "Action to have with tables without primary key [error, skip, single-chunk]")
-	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Lock tables to get consistent backup")
+	flag.StringVar(&dumpOptions.TablesWithoutPKOption, "tables-without-pk", "error", "Action to have with tables without primary key.\nValid actions are: \"error\", \"skip\", \"single-chunk\".")
+	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Display debug information.")
 	flag.StringVar(&dumpOptions.DestinationDir, "destination", "", "Directory to store the dumps")
 
 	flag.Parse()
 
+	//Setting debug level
+	if dumpOptions.Debug {
+		log.SetLevel(log.DEBUG)
+	} else {
+		log.SetLevel(log.INFO)
+	}
+
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Fatalf("Killing the dumper.")
+
+	}()
+
 	switch dumpOptions.TablesWithoutPKOption {
 	case "error", "skip", "single-chunk":
-
+		log.Debugf("The method to use with the tables without primary key is \"%s\".", dumpOptions.TablesWithoutPKOption)
 	default:
 		log.Fatalf("Error: \"%s\" is not a valid option for --tables-without-pk.", dumpOptions.TablesWithoutPKOption)
+		flag.Usage()
 	}
 
 	if dumpOptions.DestinationDir == "" {
@@ -117,13 +126,8 @@ func main() {
 		log.Fatalf("Error creating directory: %s\n%s", dumpOptions.DestinationDir, err.Error())
 	}
 
+	// Creating the buffer for the channel
 	cDataChunk := make(chan tasks.DataChunk, dumpOptions.ChannelBufferSize)
-
-	if dumpOptions.Debug {
-		log.SetLevel(log.DEBUG)
-	} else {
-		log.SetLevel(log.INFO)
-	}
 
 	cores := runtime.NumCPU()
 	if dumpOptions.Threads > cores {
@@ -131,8 +135,11 @@ func main() {
 			"We will set the number of cores to %d.", cores, dumpOptions.Threads, cores)
 		dumpOptions.Threads = cores
 	}
+
+	// Setting up the concurrency to use.
 	runtime.GOMAXPROCS(dumpOptions.Threads)
 
+	// Creating the Task Manager.
 	taskManager := tasks.NewTaskManager(
 		&wgCreateChunks,
 		&wgProcessChunks,
@@ -142,6 +149,7 @@ func main() {
 		dumpOptions.DestinationDir,
 		dumpOptions.TablesWithoutPKOption)
 
+	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
 
 	dbtm := GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
@@ -155,6 +163,7 @@ func main() {
 		tablesFromString = sqlutils.TablesFromString(flagTables)
 	}
 
+	// Merging both lists (tables and databases)
 	tablesToParse = tablesFromDatabases
 	for table, _ := range tablesFromString {
 		if _, ok := tablesToParse[table]; !ok {
@@ -162,6 +171,8 @@ func main() {
 		}
 	}
 
+	// Adding the tasks to the task manager.
+	// We create one task per table
 	for table, _ := range tablesToParse {
 		t := strings.Split(table, ".")
 		taskManager.AddTask(tasks.NewTask(t[0], t[1], dumpOptions.ChunkSize, dbtm, &taskManager))
@@ -169,9 +180,11 @@ func main() {
 
 	log.Debugf("Added %d connections to the taskManager", dumpOptions.Threads)
 
+	// Creating the workers. One per thread from the parameters.
 	for i := 0; i < dumpOptions.Threads; i++ {
 		taskManager.AddWorkerDB(GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials))
 	}
+	// Creating the chunks from the tables.
 	go taskManager.CreateChunks()
 
 	taskManager.GetTransactions(true)
