@@ -13,8 +13,9 @@ func GetChunkSqlQuery(table *Table, chunkMax interface{}, offset int64) string {
 	if chunkMax == nil {
 		chunkMax = 0
 	}
+	keyForChunks := table.GetPrimaryOrUniqueKey()
 	query := fmt.Sprintf("SELECT %s FROM `%s`.`%s` WHERE %s >= %d LIMIT 1 OFFSET %d",
-		table.PrimaryKey, table.Schema, table.Name, table.PrimaryKey, chunkMax, offset)
+		keyForChunks, table.Schema, table.Name, keyForChunks, chunkMax, offset)
 	return query
 }
 

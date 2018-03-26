@@ -9,16 +9,22 @@ type DataChunk struct {
 	Sequence      int64
 	Task          *Task
 	IsSingleChunk bool
+	IsLastChunk   bool
 }
 
 // GetWhereSQL return the where condition for a chunk
 func (this *DataChunk) GetWhereSQL() string {
-	return fmt.Sprintf("%s BETWEEN ? AND ?", this.Task.Table.PrimaryKey)
+	if this.IsLastChunk == true {
+		return fmt.Sprintf("%s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
+	} else {
+		return fmt.Sprintf("%s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
+	}
 }
 
 func (this *DataChunk) GetPrepareSQL() string {
+
 	if this.IsSingleChunk == true {
-		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s",
+		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s ",
 			this.Task.Table.Schema, this.Task.Table.Name)
 	} else {
 		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s WHERE %s",
@@ -41,11 +47,22 @@ func NewSingleDataChunk(task *Task) DataChunk {
 }
 
 func NewDataChunk(chunkMin int64, chunkMax int64, chunkNumber int64, task *Task) DataChunk {
+
 	return DataChunk{
 		Min:           chunkMin,
 		Max:           chunkMax,
 		Sequence:      chunkNumber,
 		Task:          task,
-		IsSingleChunk: false}
+		IsSingleChunk: false,
+		IsLastChunk:   false}
+}
 
+func NewDataLastChunk(chunkMin int64, chunkNumber int64, task *Task) DataChunk {
+
+	return DataChunk{
+		Min:           chunkMin,
+		Sequence:      chunkNumber,
+		Task:          task,
+		IsSingleChunk: false,
+		IsLastChunk:   true}
 }

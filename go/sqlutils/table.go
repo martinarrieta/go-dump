@@ -12,7 +12,8 @@ type ColumnsMap map[string]int
 type Table struct {
 	Name            string
 	Schema          string
-	PrimaryKey      string
+	primaryKey      string
+	uniqueKey       string
 	ColumnTypes     []*sql.ColumnType
 	ColumnsOrdinals ColumnsMap
 }
@@ -33,6 +34,18 @@ func (this *Table) GetColumn(field string) *sql.ColumnType {
 	return this.ColumnTypes[this.ColumnsOrdinals[field]]
 }
 
+func (this *Table) GetPrimaryOrUniqueKey() string {
+	if len(this.primaryKey) > 0 {
+		return this.primaryKey
+	}
+
+	if len(this.uniqueKey) > 0 {
+		return this.uniqueKey
+	}
+
+	return ""
+}
+
 func (this *Table) getTableData(db *sql.DB) error {
 
 	rows, err := db.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", this.GetFullName()))
@@ -46,7 +59,10 @@ func (this *Table) getTableData(db *sql.DB) error {
 	for rows.Next() {
 		rows.Scan(&fName, &fType, &fNull, &fKey, &fDefault, &fExtra)
 		if fKey == "PRI" {
-			this.PrimaryKey = fName
+			this.primaryKey = fName
+		}
+		if fKey == "UNIQUE" {
+			this.uniqueKey = fName
 		}
 	}
 	return nil

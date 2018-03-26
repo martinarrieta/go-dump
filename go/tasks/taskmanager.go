@@ -109,7 +109,6 @@ func (this *TaskManager) GetTransactions(lockTables bool) {
 		lockedTime := time.Since(startLocking)
 		log.Infof("Unlocking the tables. Tables were locked for %s", lockedTime)
 	}
-	log.Infof("Locking tables to get a consistent backup.")
 
 }
 
@@ -120,6 +119,13 @@ func (this *TaskManager) StartWorkers() error {
 		go this.StartWorker(i)
 	}
 	log.Debugf("All workers are running")
+	return nil
+}
+
+func (this *TaskManager) DisplaySummary() error {
+	for _, task := range this.tasksPool {
+		fmt.Printf("   %d -> %s\n", task.TotalChunks, task.Table.GetFullName())
+	}
 	return nil
 }
 
@@ -151,25 +157,37 @@ func (this *TaskManager) StartWorker(workerId int) {
 		}
 
 		if query != chunk.GetPrepareSQL() {
-			query := chunk.GetPrepareSQL()
+
+			query = chunk.GetPrepareSQL()
+			if stmt != nil {
+				stmt.Close()
+			}
+
+			stmt, err = this.WorkersTx[workerId].Prepare(query)
+		} else {
 			stmt, err = this.WorkersTx[workerId].Prepare(query)
 		}
 
 		if err != nil {
-			log.Fatal("Error preparring query: \"%s\" with parameters: min: %d max:%s . \nError: %s",
-				query, chunk.Min, chunk.Max, err.Error())
+			log.Fatalf("%s", err.Error())
 		}
 		var rows *sql.Rows
 		var err error
 		if chunk.IsSingleChunk == true {
+			log.Debugf("Is single chunk %s.", chunk.Task.Table.GetFullName())
 			rows, err = stmt.Query()
 		} else {
-			rows, err = stmt.Query(chunk.Min, chunk.Max)
+			if chunk.IsLastChunk == true {
+				rows, err = stmt.Query(chunk.Min)
+				log.Debugf("Last chunk %s.", chunk.Task.Table.GetFullName())
+
+			} else {
+				rows, err = stmt.Query(chunk.Min, chunk.Max)
+			}
 		}
 
 		if err != nil {
-			log.Fatal("Error executing query: \"%s\" with parameters: min: %d max:%s . \nError: %s",
-				query, chunk.Min, chunk.Max, err.Error())
+			log.Fatalf("%s", err.Error())
 		}
 
 		tablename = chunk.Task.Table.GetFullName()
@@ -184,7 +202,8 @@ func (this *TaskManager) StartWorker(workerId int) {
 		if chunk.IsSingleChunk == true {
 			fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("-- Single chunk on %s\n", tablename))
 		} else {
-			fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("-- Chunk %d - from %d to %d", chunk.Sequence, chunk.Min, chunk.Max))
+			fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("-- Chunk %d - from %d to %d",
+				chunk.Sequence, chunk.Min, chunk.Max))
 		}
 
 		r.Parse(fileDescriptors[tablename])
