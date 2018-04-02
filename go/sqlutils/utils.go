@@ -9,17 +9,7 @@ import (
 	"github.com/outbrain/golib/log"
 )
 
-func GetChunkSqlQuery(table *Table, chunkMax interface{}, offset int64) string {
-	if chunkMax == nil {
-		chunkMax = 0
-	}
-	keyForChunks := table.GetPrimaryOrUniqueKey()
-	query := fmt.Sprintf("SELECT %s FROM `%s`.`%s` WHERE %s >= %d LIMIT 1 OFFSET %d",
-		keyForChunks, table.Schema, table.Name, keyForChunks, chunkMax, offset)
-	return query
-}
-
-func parseString(s interface{}) []byte {
+func ParseString(s interface{}) []byte {
 
 	escape := false
 	var rets []byte
@@ -49,16 +39,21 @@ func parseString(s interface{}) []byte {
 	return rets
 }
 
-func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
+func TablesFromString(tablesParam string) map[string]bool {
 	ret := make(map[string]bool)
 
-	databases := strings.Split(databasesParam, ",")
+	tables := strings.Split(tablesParam, ",")
 
-	query := fmt.Sprintf("SELECT TABLE_SCHEMA, TABLE_NAME "+
-		"FROM information_schema.TABLES WHERE TABLE_SCHEMA IN('%s') AND TABLE_TYPE ='BASE TABLE'  AND "+
-		"NOT (TABLE_SCHEMA = 'mysql' AND (TABLE_NAME = 'slow_log' OR TABLE_NAME = 'general_log'))", strings.Join(databases, "','"))
+	for _, table := range tables {
+		if _, ok := ret[table]; !ok {
+			ret[table] = true
+		}
+	}
+	return ret
+}
 
-	log.Debug("Query: ", query)
+func getTablesFromQuery(query string, db *sql.DB) map[string]bool {
+	ret := make(map[string]bool)
 
 	stmt, err := db.Prepare(query)
 
@@ -91,15 +86,49 @@ func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
 	return ret
 }
 
-func TablesFromString(tablesParam string) map[string]bool {
-	ret := make(map[string]bool)
+func TablesFromAllDatabases(db *sql.DB) map[string]bool {
 
-	tables := strings.Split(tablesParam, ",")
+	query := fmt.Sprintf("SELECT TABLE_SCHEMA, TABLE_NAME " +
+		"FROM information_schema.TABLES WHERE TABLE_TYPE ='BASE TABLE'  AND " +
+		"TABLE_SCHEMA NOT IN ('performance_schema') AND " +
+		"NOT (TABLE_SCHEMA = 'mysql' AND (TABLE_NAME = 'slow_log' OR TABLE_NAME = 'general_log'))")
 
-	for _, table := range tables {
-		if _, ok := ret[table]; !ok {
-			ret[table] = true
-		}
-	}
-	return ret
+	log.Debug("Query: ", query)
+	return getTablesFromQuery(query, db)
+}
+
+func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
+
+	databases := strings.Split(databasesParam, ",")
+
+	query := fmt.Sprintf("SELECT TABLE_SCHEMA, TABLE_NAME "+
+		"FROM information_schema.TABLES WHERE TABLE_SCHEMA IN('%s') AND TABLE_TYPE ='BASE TABLE'  AND "+
+		"NOT (TABLE_SCHEMA = 'mysql' AND TABLE_NAME NOT IN ( 'slow_log' , 'general_log'))", strings.Join(databases, "','"))
+
+	log.Debug("Query: ", query)
+	return getTablesFromQuery(query, db)
+}
+
+func GetFlushTablesWithReadLockSQL() string {
+	return fmt.Sprintf("FLUSH TABLES WITH READ LOCK")
+}
+
+func GetUseDatabaseSQL(schema string) string {
+	return fmt.Sprintf("USE %s", schema)
+}
+
+func GetMasterStatusSQL() string {
+	return fmt.Sprintf("SHOW MASTER STATUS")
+}
+
+func GetDropTableIfExistSQL(table string) string {
+	return fmt.Sprintf("DROP TABLE IF EXISTS %s", table)
+}
+
+func GetShowCreateTableSQL(table string) string {
+	return fmt.Sprintf("SHOW CREATE TABLE %s", table)
+}
+
+func GetShowColumnsTableSQL(table string) string {
+	return fmt.Sprintf("SHOW COLUMNS FROM %s", table)
 }

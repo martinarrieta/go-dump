@@ -10,28 +10,69 @@ import (
 type ColumnsMap map[string]int
 
 type Table struct {
-	Name            string
-	Schema          string
+	name            string
+	schema          string
 	primaryKey      string
 	uniqueKey       string
-	ColumnTypes     []*sql.ColumnType
-	ColumnsOrdinals ColumnsMap
+	columnTypes     []*sql.ColumnType
+	columnsOrdinals ColumnsMap
+	createSQL       string
+	extra           map[string]interface{}
+	IsLocked        bool
+}
+
+func (this *Table) setExtra(key string, value interface{}) {
+	if this.extra == nil {
+		this.extra = make(map[string]interface{})
+	}
+	this.extra[key] = value
+}
+
+func (this *Table) GetExtra(key string) interface{} {
+	return this.extra[key]
+}
+
+func (this *Table) Lock(db *sql.DB) error {
+	_, err := db.Exec(fmt.Sprintf("LOCK TABLE %s READ", this.GetFullName()))
+	if err == nil {
+		this.IsLocked = true
+	}
+	return err
+}
+func (this *Table) Unlock(db *sql.DB) error {
+	_, err := db.Exec(fmt.Sprintf("UNLOCK TABLES"))
+	if err == nil {
+		this.IsLocked = false
+	}
+	return err
+}
+
+func (this *Table) GetColumnsSQL() string {
+	return fmt.Sprintf("SHOW COLUMNS FROM %s ", this.GetFullName())
 }
 
 func (this *Table) AddColumn(column *sql.ColumnType) {
-	this.ColumnTypes = append(this.ColumnTypes, column)
+	this.columnTypes = append(this.columnTypes, column)
 }
 
 func (this *Table) GetFullName() string {
-	return fmt.Sprintf("%s.%s", this.Schema, this.Name)
+	return fmt.Sprintf("%s.%s", this.schema, this.name)
+}
+
+func (this *Table) GetSchema() string {
+	return fmt.Sprintf("`%s`", this.schema)
+}
+
+func (this *Table) GetName() string {
+	return fmt.Sprintf("`%s`", this.name)
 }
 
 func (this *Table) GetEscapedFullName() string {
-	return fmt.Sprintf("`%s`.`%s`", this.Schema, this.Name)
+	return fmt.Sprintf("`%s`.`%s`", this.schema, this.name)
 }
 
 func (this *Table) GetColumn(field string) *sql.ColumnType {
-	return this.ColumnTypes[this.ColumnsOrdinals[field]]
+	return this.columnTypes[this.columnsOrdinals[field]]
 }
 
 func (this *Table) GetPrimaryOrUniqueKey() string {
@@ -48,7 +89,7 @@ func (this *Table) GetPrimaryOrUniqueKey() string {
 
 func (this *Table) getTableData(db *sql.DB) error {
 
-	rows, err := db.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", this.GetFullName()))
+	rows, err := db.Query(GetShowColumnsTableSQL(this.GetFullName()))
 
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal("Error getting column details for table ", this.GetFullName(), " : ", err.Error())
@@ -65,14 +106,18 @@ func (this *Table) getTableData(db *sql.DB) error {
 			this.uniqueKey = fName
 		}
 	}
+	var tableName, tableSQL string
+	err = db.QueryRow(GetShowCreateTableSQL(this.GetFullName())).Scan(&tableName, &tableSQL)
+	this.setExtra("tableSQL", tableSQL)
+
 	return nil
 }
 
 func NewTable(schema string, name string, db *sql.DB) *Table {
-
 	table := &Table{
-		Name:   name,
-		Schema: schema,
+		name:     name,
+		schema:   schema,
+		IsLocked: false,
 	}
 	table.getTableData(db)
 	return table

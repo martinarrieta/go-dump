@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"os"
@@ -19,7 +20,9 @@ func NewTaskManager(
 	db *sql.DB,
 	threads int,
 	dest string,
-	tablesWithoutPKOption string) TaskManager {
+	tablesWithoutPKOption string,
+	skipUseDatabase bool,
+	getMasterStatus bool) TaskManager {
 	tm := TaskManager{
 		CreateChunksWaitGroup:  wgC,
 		ProcessChunksWaitGroup: wgP,
@@ -27,7 +30,10 @@ func NewTaskManager(
 		DB:                     db,
 		ThreadsCount:           threads,
 		DestinationDir:         dest,
-		TablesWithoutPKOption:  tablesWithoutPKOption}
+		TablesWithoutPKOption:  tablesWithoutPKOption,
+		SkipUseDatabase:        skipUseDatabase,
+		GetMasterStatus:        getMasterStatus,
+	}
 	return tm
 }
 
@@ -38,11 +44,26 @@ type TaskManager struct {
 	DB                     *sql.DB
 	ThreadsCount           int
 	tasksPool              []*Task
-	WorkersTx              []*sql.Tx
-	WorkersDB              []*sql.DB
+	workersTx              []*sql.Tx
+	workersDB              []*sql.DB
 	TotalChunks            int64
+	Queue                  int64
 	DestinationDir         string
 	TablesWithoutPKOption  string
+	extraData              map[string]interface{}
+	SkipUseDatabase        bool
+	GetMasterStatus        bool
+}
+
+func (this *TaskManager) setExtraData(key string, value interface{}) {
+	if this.extraData == nil {
+		this.extraData = make(map[string]interface{})
+	}
+	this.extraData[key] = value
+}
+
+func (this *TaskManager) GetExtraData(key string) interface{} {
+	return this.extraData[key]
 }
 
 func (this *TaskManager) AddTask(t Task) {
@@ -59,53 +80,130 @@ func (this *TaskManager) GetTasksPool() []*Task {
 }
 
 func (this *TaskManager) AddWorkerDB(db *sql.DB) {
-	this.WorkersDB = append(this.WorkersDB, db)
-	this.WorkersTx = append(this.WorkersTx, nil)
+	this.workersDB = append(this.workersDB, db)
+	this.workersTx = append(this.workersTx, nil)
 }
 
-func (this *TaskManager) lockTable(task *Task) error {
-	_, err := this.DB.Exec(fmt.Sprintf("LOCK TABLE `%s`.`%s` READ", task.Table.Schema, task.Table.Name))
-	if err != nil {
-		log.Errore(err)
-		return err
+func (this *TaskManager) lockTables() {
+	for _, task := range this.tasksPool {
+		if err := task.Table.Lock(this.DB); err != nil {
+			log.Fatalf("Error locking table: %s", err.Error())
+		}
 	}
-	log.Infof("Locking table: `%s`.`%s`", task.Table.Schema, task.Table.Name)
-	return nil
 }
 
-func (this *TaskManager) GetTransactions(lockTables bool) {
+func (this *TaskManager) unlockTables() {
+	log.Debugf("Unlocking tables")
+	if _, err := this.DB.Exec("UNLOCK TABLES"); err != nil {
+		log.Criticalf("Error unlocking the tables: %s", err.Error())
+	}
+}
 
-	db := this.DB
+func (this *TaskManager) lockAllTables() {
+	query := sqlutils.GetFlushTablesWithReadLockSQL()
+	if _, err := this.DB.Exec(query); err != nil {
+		log.Fatalf("Error locking table: %s", err.Error())
+	}
+}
+
+func (this *TaskManager) createWorkers() {
+	for i, dbW := range this.workersDB {
+		//log.Infof("Starting worker %d", i)
+		if this.workersTx[i] == nil {
+			txW, _ := dbW.Begin()
+			txW.Exec("SELECT 1")
+			this.workersTx[i] = txW
+		}
+	}
+}
+
+func (this *TaskManager) getReplicationData() {
+
+	log.Info("Getting Master Status")
+
+	var masterFile, binlogDoDb, binlogIgnoreDB, executedGTIDSet string
+	var masterPosition int
+
+	masterRows, err := this.DB.Query(sqlutils.GetMasterStatusSQL())
+	if err != nil {
+		log.Fatalf("%s", err.Error())
+	}
+	cols, err := masterRows.Columns()
+	log.Infof("Cols %+v", cols)
+
+	if err != nil {
+		log.Fatalf("%s", err.Error())
+	}
+	if len(cols) == 5 {
+		out := []interface{}{
+			&masterFile,
+			&masterPosition,
+			&binlogDoDb,
+			&binlogIgnoreDB,
+			&executedGTIDSet,
+		}
+		masterRows.Next()
+		err := masterRows.Scan(out...)
+		if err != nil {
+			log.Fatalf("%s", err.Error())
+		}
+		masterRows.Close()
+		filename := fmt.Sprintf("%s/master-data.sql", this.DestinationDir)
+		log.Infof("Master File: %s\nMaster Position: %d", masterFile, masterPosition)
+		file, _ := os.Create(filename)
+		buffer := bufio.NewWriter(file)
+		buffer.WriteString(fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
+		buffer.Flush()
+	}
+}
+
+func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
+	for _, task := range this.tasksPool {
+		filename := fmt.Sprintf("%s/%s-definition.sql", this.DestinationDir, task.Table.GetFullName())
+		file, _ := os.Create(filename)
+		buffer := bufio.NewWriter(file)
+		if this.SkipUseDatabase == false {
+			buffer.WriteString(sqlutils.GetUseDatabaseSQL(task.Table.GetSchema()) + ";\n")
+		}
+
+		buffer.WriteString("/*!40101 SET NAMES binary*/;\n")
+		buffer.WriteString("/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n")
+
+		if addDropTable {
+			buffer.WriteString(sqlutils.GetDropTableIfExistSQL(task.Table.GetName()) + ";\n")
+		}
+
+		buffer.WriteString(task.Table.GetExtra("tableSQL").(string) + ";\n")
+
+		buffer.Flush()
+	}
+}
+
+func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
+
 	var startLocking time.Time
 
 	if lockTables == true {
 		log.Infof("Locking tables to get a consistent backup.")
 		startLocking = time.Now()
-
-		for _, task := range this.tasksPool {
-			if err := this.lockTable(task); err != nil {
-				log.Fatalf("Error locking table: %s", err.Error())
-			}
+		if allDatabases == true {
+			this.lockAllTables()
+		} else {
+			this.lockTables()
 		}
 	}
 
 	log.Debug("Starting workers")
-	for i, dbW := range this.WorkersDB {
-		log.Debugf("Starting worker %d", i)
-		if this.WorkersTx[i] == nil {
-			//"START TRANSACTION /*!40108 WITH CONSISTENT SNAPSHOT */"
+	this.createWorkers()
 
-			txW, _ := dbW.Begin()
-			//stm, _ := txW.Prepare("SELECT * FROM mysql.user LIMIT 1")
-			//_ = stm.QueryRow().Scan()
-			this.WorkersTx[i] = txW
-		}
+	// GET MASTER DATA
+	if this.GetMasterStatus == true {
+		this.getReplicationData()
 	}
-	log.Debugf("Added %d transactions", len(this.WorkersDB))
+	log.Debugf("Added %d transactions", len(this.workersDB))
 
-	log.Debugf("Unlocking tables")
 	if lockTables == true {
-		db.Exec("UNLOCK TABLES")
+		this.unlockTables()
 		lockedTime := time.Since(startLocking)
 		log.Infof("Unlocking the tables. Tables were locked for %s", lockedTime)
 	}
@@ -113,8 +211,8 @@ func (this *TaskManager) GetTransactions(lockTables bool) {
 }
 
 func (this *TaskManager) StartWorkers() error {
-	log.Infof("Starting %d workers", len(this.WorkersTx))
-	for i, _ := range this.WorkersTx {
+	log.Infof("Starting %d workers", len(this.workersTx))
+	for i, _ := range this.workersTx {
 		this.ProcessChunksWaitGroup.Add(1)
 		go this.StartWorker(i)
 	}
@@ -130,91 +228,78 @@ func (this *TaskManager) DisplaySummary() error {
 }
 
 func (this *TaskManager) PrintStatus() {
-
 	time.Sleep(2 * time.Second)
-	queueSize := len(this.ChunksChannel)
-
-	log.Infof("Printing status. Queue: %d", this.TotalChunks)
-
-	for queueSize > 0 {
-		log.Infof("Pending %d of %d", queueSize, this.TotalChunks)
+	log.Infof("Status. Queue: %d of %d", this.Queue, this.TotalChunks)
+	for this.Queue > 0 {
+		log.Infof("Queue: %d of %d", this.Queue, this.TotalChunks)
 		time.Sleep(1 * time.Second)
-		queueSize = len(this.ChunksChannel)
 	}
 }
 
+func (this *TaskManager) CleanChunkChannel() {
+	for {
+		_, ok := <-this.ChunksChannel
+		if !ok {
+			log.Debugf("Channel closed.")
+			break
+		}
+	}
+}
 func (this *TaskManager) StartWorker(workerId int) {
 	fileDescriptors := make(map[string]*os.File)
 	var query string
 	var stmt *sql.Stmt
 	var err error
-	var tablename string
 	for {
 		chunk, ok := <-this.ChunksChannel
+		this.Queue = this.Queue - 1
+		log.Debugf("Queue -1: %d ", this.Queue)
+
 		if !ok {
-			log.Infof("Channel %d is closed.", workerId)
+			log.Debugf("Channel %d is closed.", workerId)
 			break
 		}
 
 		if query != chunk.GetPrepareSQL() {
-
 			query = chunk.GetPrepareSQL()
 			if stmt != nil {
 				stmt.Close()
 			}
-
-			stmt, err = this.WorkersTx[workerId].Prepare(query)
+			stmt, err = this.workersTx[workerId].Prepare(query)
 		} else {
-			stmt, err = this.WorkersTx[workerId].Prepare(query)
-		}
-
-		if err != nil {
-			log.Fatalf("%s", err.Error())
-		}
-		var rows *sql.Rows
-		var err error
-		if chunk.IsSingleChunk == true {
-			log.Debugf("Is single chunk %s.", chunk.Task.Table.GetFullName())
-			rows, err = stmt.Query()
-		} else {
-			if chunk.IsLastChunk == true {
-				rows, err = stmt.Query(chunk.Min)
-				log.Debugf("Last chunk %s.", chunk.Task.Table.GetFullName())
-
-			} else {
-				rows, err = stmt.Query(chunk.Min, chunk.Max)
-			}
+			stmt, err = this.workersTx[workerId].Prepare(query)
 		}
 
 		if err != nil {
 			log.Fatalf("%s", err.Error())
 		}
 
-		tablename = chunk.Task.Table.GetFullName()
-
+		tablename := chunk.Task.Table.GetFullName()
 		if _, ok := fileDescriptors[tablename]; !ok {
-			filename := fmt.Sprintf("%s/%s-%d.sql", this.DestinationDir, tablename, workerId)
+			filename := fmt.Sprintf("%s/%s-thread%d.sql", this.DestinationDir, tablename, workerId)
 			fileDescriptors[tablename], _ = os.Create(filename)
 		}
 
-		r := sqlutils.NewRowsParser(rows, chunk.Task.Table)
-
-		if chunk.IsSingleChunk == true {
-			fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("-- Single chunk on %s\n", tablename))
-		} else {
-			fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("-- Chunk %d - from %d to %d",
-				chunk.Sequence, chunk.Min, chunk.Max))
-		}
-
-		r.Parse(fileDescriptors[tablename])
+		chunk.Parse(stmt, fileDescriptors[tablename])
 		stmt.Close()
 	}
-	this.WorkersTx[workerId].Commit()
+	this.workersTx[workerId].Commit()
 	this.ProcessChunksWaitGroup.Done()
 }
 
-func (this *TaskManager) CreateChunks() {
+func (this *TaskManager) AddChunk(chunk DataChunk) {
+	this.ChunksChannel <- chunk
+
+}
+
+func (this *TaskManager) CreateChunks(db *sql.DB) {
+	log.Debugf("tasksPool  %v", this.tasksPool)
 	for _, t := range this.tasksPool {
-		go t.CreateChunks(this.DB)
+		this.CreateChunksWaitGroup.Add(1)
+		log.Debugf("CreateChunksWaitGroup TaskManager Add %v", this.CreateChunksWaitGroup)
+		go t.CreateChunks(db)
 	}
+	this.CreateChunksWaitGroup.Done()
+	log.Debugf("CreateChunksWaitGroup TaskManager Done %v", this.CreateChunksWaitGroup)
+
 }

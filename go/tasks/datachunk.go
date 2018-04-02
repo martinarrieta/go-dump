@@ -1,6 +1,17 @@
 package tasks
 
-import "fmt"
+import (
+	"bufio"
+	"database/sql"
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/martinarrieta/go-dump/go/sqlutils"
+
+	"github.com/outbrain/golib/log"
+)
 
 // DataChunk is the structure to handle the information of each chunk
 type DataChunk struct {
@@ -14,26 +25,125 @@ type DataChunk struct {
 
 // GetWhereSQL return the where condition for a chunk
 func (this *DataChunk) GetWhereSQL() string {
+	if this.IsSingleChunk == true {
+		return ""
+	}
+
 	if this.IsLastChunk == true {
-		return fmt.Sprintf("%s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
+		return fmt.Sprintf("WHERE %s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
 	} else {
-		return fmt.Sprintf("%s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
+		return fmt.Sprintf("WHERE %s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
 	}
 }
 
 func (this *DataChunk) GetPrepareSQL() string {
 
-	if this.IsSingleChunk == true {
-		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s ",
-			this.Task.Table.Schema, this.Task.Table.Name)
-	} else {
-		return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s.%s WHERE %s",
-			this.Task.Table.Schema, this.Task.Table.Name, this.GetWhereSQL())
-	}
+	return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s %s",
+		this.Task.Table.GetFullName(), this.GetWhereSQL())
+
 }
 
 func (this *DataChunk) GetSampleSQL() string {
-	return fmt.Sprintf("SELECT * FROM %s.%s LIMIT 1", this.Task.Table.Schema, this.Task.Table.Name)
+	return fmt.Sprintf("SELECT * FROM %s LIMIT 1", this.Task.Table.GetFullName())
+}
+
+func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
+
+	//if this.skipUseDatabase == false {
+	//	fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("USE %s\n", chunk.Task.Table.GetSchema()))
+	//}
+
+	var rows *sql.Rows
+	var err error
+	if this.IsSingleChunk == true {
+		log.Debugf("Is single chunk %s.", this.Task.Table.GetFullName())
+		rows, err = stmt.Query()
+	} else {
+		if this.IsLastChunk == true {
+			rows, err = stmt.Query(this.Min)
+			log.Debugf("Last chunk %s.", this.Task.Table.GetFullName())
+		} else {
+			rows, err = stmt.Query(this.Min, this.Max)
+		}
+	}
+
+	if err != nil {
+		log.Fatalf("%s", err.Error())
+	}
+
+	tablename := this.Task.Table.GetFullName()
+
+	//r := sqlutils.NewRowsParser(rows, this.Task.Table)
+	buffer := bufio.NewWriter(file)
+
+	if this.IsSingleChunk == true {
+		buffer.WriteString(fmt.Sprintf("-- Single chunk on %s\n", tablename))
+	} else {
+		buffer.WriteString(fmt.Sprintf("-- Chunk %d - from %d to %d\n",
+			this.Sequence, this.Min, this.Max))
+	}
+	if this.Task.TaskManager.SkipUseDatabase == false {
+		buffer.WriteString(fmt.Sprintf("USE %s\n", this.Task.Table.GetSchema()))
+	}
+	columns, _ := rows.ColumnTypes()
+	buff := make([]interface{}, len(columns))
+	data := make([]interface{}, len(columns))
+	for i, _ := range buff {
+		buff[i] = &data[i]
+	}
+	firstRow := true
+
+	var rowsNumber = int64(0)
+	for rows.Next() {
+
+		if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {
+			buffer.WriteString(");\n")
+			firstRow = true
+		}
+
+		if firstRow == true {
+			buffer.WriteString(fmt.Sprintf("INSERT INTO %s VALUES \n(", this.Task.Table.GetName()))
+		}
+		err = rows.Scan(buff...)
+
+		if err != nil {
+			panic(err.Error()) // proper error handling instead of panic in your app
+		}
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+		if firstRow == false {
+			buffer.WriteString("),\n(")
+		} else {
+			firstRow = false
+		}
+
+		max := len(data)
+		for i, d := range data {
+
+			switch d.(type) {
+			case []byte:
+				buffer.Write([]byte("'"))
+				buffer.Write(sqlutils.ParseString(d))
+				buffer.Write([]byte("'"))
+			case int64:
+				buffer.WriteString(strconv.FormatInt(d.(int64), 10))
+			case nil:
+				buffer.Write([]byte("NULL"))
+			case time.Time:
+				buffer.WriteString(d.(time.Time).Format("2009-09-08 03:05:30.000000"))
+			default:
+				buffer.Write(d.([]byte))
+			}
+			if i != max-1 {
+				buffer.Write([]byte(","))
+			}
+		}
+	}
+	rows.Close()
+	buffer.WriteString(");\n")
+	buffer.Flush()
+	return nil
 }
 
 // Create a single chunk for a table, this is only when the table doesn't have
@@ -46,22 +156,22 @@ func NewSingleDataChunk(task *Task) DataChunk {
 
 }
 
-func NewDataChunk(chunkMin int64, chunkMax int64, chunkNumber int64, task *Task) DataChunk {
+func NewDataChunk(task *Task) DataChunk {
 
 	return DataChunk{
-		Min:           chunkMin,
-		Max:           chunkMax,
-		Sequence:      chunkNumber,
+		Min:           task.chunkMin,
+		Max:           task.chunkMax,
+		Sequence:      task.TotalChunks,
 		Task:          task,
 		IsSingleChunk: false,
 		IsLastChunk:   false}
 }
 
-func NewDataLastChunk(chunkMin int64, chunkNumber int64, task *Task) DataChunk {
+func NewDataLastChunk(task *Task) DataChunk {
 
 	return DataChunk{
-		Min:           chunkMin,
-		Sequence:      chunkNumber,
+		Min:           task.chunkMin,
+		Sequence:      task.TotalChunks,
 		Task:          task,
 		IsSingleChunk: false,
 		IsLastChunk:   true}
