@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/martinarrieta/go-dump.svg?branch=master)](https://travis-ci.org/martinarrieta/go-dump)
+
 # go-dump
 
 ** IMPORTANT! the project is under development and there is a lot of work to do. **
