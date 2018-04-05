@@ -1,4 +1,4 @@
-package tasks
+package utils
 
 import (
 	"bufio"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/martinarrieta/go-dump/go/sqlutils"
 	"github.com/outbrain/golib/log"
 )
 
@@ -100,7 +99,7 @@ func (this *TaskManager) unlockTables() {
 }
 
 func (this *TaskManager) lockAllTables() {
-	query := sqlutils.GetFlushTablesWithReadLockSQL()
+	query := GetFlushTablesWithReadLockSQL()
 	if _, err := this.DB.Exec(query); err != nil {
 		log.Fatalf("Error locking table: %s", err.Error())
 	}
@@ -124,7 +123,7 @@ func (this *TaskManager) getReplicationData() {
 	var masterFile, binlogDoDb, binlogIgnoreDB, executedGTIDSet string
 	var masterPosition int
 
-	masterRows, err := this.DB.Query(sqlutils.GetMasterStatusSQL())
+	masterRows, err := this.DB.Query(GetMasterStatusSQL())
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}
@@ -159,18 +158,18 @@ func (this *TaskManager) getReplicationData() {
 
 func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 	for _, task := range this.tasksPool {
-		filename := fmt.Sprintf("%s/%s-definition.sql", this.DestinationDir, task.Table.GetFullName())
+		filename := fmt.Sprintf("%s/%s-definition.sql", this.DestinationDir, task.Table.GetUnescapedFullName())
 		file, _ := os.Create(filename)
 		buffer := bufio.NewWriter(file)
 		if this.SkipUseDatabase == false {
-			buffer.WriteString(sqlutils.GetUseDatabaseSQL(task.Table.GetSchema()) + ";\n")
+			buffer.WriteString(GetUseDatabaseSQL(task.Table.GetSchema()) + ";\n")
 		}
 
 		buffer.WriteString("/*!40101 SET NAMES binary*/;\n")
 		buffer.WriteString("/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n")
 
 		if addDropTable {
-			buffer.WriteString(sqlutils.GetDropTableIfExistSQL(task.Table.GetName()) + ";\n")
+			buffer.WriteString(GetDropTableIfExistSQL(task.Table.GetName()) + ";\n")
 		}
 
 		buffer.WriteString(task.Table.GetExtra("tableSQL").(string) + ";\n")
@@ -274,7 +273,7 @@ func (this *TaskManager) StartWorker(workerId int) {
 			log.Fatalf("%s", err.Error())
 		}
 
-		tablename := chunk.Task.Table.GetFullName()
+		tablename := chunk.Task.Table.GetUnescapedFullName()
 		if _, ok := fileDescriptors[tablename]; !ok {
 			filename := fmt.Sprintf("%s/%s-thread%d.sql", this.DestinationDir, tablename, workerId)
 			fileDescriptors[tablename], _ = os.Create(filename)

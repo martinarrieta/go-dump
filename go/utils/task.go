@@ -1,15 +1,14 @@
-package tasks
+package utils
 
 import (
 	"database/sql"
 	"fmt"
 
-	"github.com/martinarrieta/go-dump/go/sqlutils"
 	"github.com/outbrain/golib/log"
 )
 
 type Task struct {
-	Table           *sqlutils.Table
+	Table           *Table
 	ChunkSize       int64
 	OutputChunkSize int64
 	TaskManager     *TaskManager
@@ -32,11 +31,11 @@ func (this *Task) AddChunk(chunk DataChunk) {
 
 func (this *Task) GetChunkSqlQuery() string {
 	keyForChunks := this.Table.GetPrimaryOrUniqueKey()
-	log.Debugf("Creating chunk for table: %s")
+	//log.Debugf("Creating chunk for table: %s")
 
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 OFFSET %d",
 		keyForChunks, this.Table.GetFullName(), keyForChunks, this.chunkMax, this.ChunkSize)
-	log.Debugf("Creating chunk Query: %s", query)
+	//log.Debugf("Creating chunk Query: %s", query)
 
 	return query
 }
@@ -44,7 +43,7 @@ func (this *Task) GetChunkSqlQuery() string {
 func (this *Task) GetLastChunkSqlQuery() string {
 
 	keyForChunks := this.Table.GetPrimaryOrUniqueKey()
-	return fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 ",
+	return fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1",
 		keyForChunks, this.Table.GetFullName(), keyForChunks, this.chunkMin)
 }
 
@@ -105,7 +104,7 @@ func NewTask(schema string,
 	db *sql.DB,
 	tm *TaskManager) Task {
 	return Task{
-		Table:           sqlutils.NewTable(schema, table, db),
+		Table:           NewTable(schema, table, db),
 		ChunkSize:       chunkSize,
 		OutputChunkSize: outputChunkSize,
 		DB:              db,

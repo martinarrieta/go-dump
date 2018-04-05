@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/martinarrieta/go-dump/go/utils"
+
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/martinarrieta/go-dump/go/sqlutils"
-	"github.com/martinarrieta/go-dump/go/tasks"
 	"github.com/outbrain/golib/log"
 )
 
@@ -173,7 +173,7 @@ func main() {
 	}
 
 	// Creating the buffer for the channel
-	cDataChunk := make(chan tasks.DataChunk, dumpOptions.ChannelBufferSize)
+	cDataChunk := make(chan utils.DataChunk, dumpOptions.ChannelBufferSize)
 
 	cores := runtime.NumCPU()
 	if dumpOptions.Threads > cores {
@@ -191,7 +191,7 @@ func main() {
 		log.Critical("Error whith the database connection. %s", err.Error())
 	}
 	// Creating the Task Manager.
-	taskManager := tasks.NewTaskManager(
+	taskManager := utils.NewTaskManager(
 		&wgCreateChunks,
 		&wgProcessChunks,
 		cDataChunk,
@@ -214,15 +214,15 @@ func main() {
 	log.Debug("Error TablesFromDatabase: ", err)
 
 	if flagAllDatabases == true {
-		tablesToParse = sqlutils.TablesFromAllDatabases(dbchunks)
+		tablesToParse = utils.TablesFromAllDatabases(dbchunks)
 	} else {
 		if len(flagDatabases) > 0 {
-			tablesFromDatabases = sqlutils.TablesFromDatabase(flagDatabases, dbchunks)
+			tablesFromDatabases = utils.TablesFromDatabase(flagDatabases, dbchunks)
 			log.Debugf("tablesFromDatabases: %v ", tablesFromDatabases)
 		}
 
 		if len(flagTables) > 0 {
-			tablesFromString = sqlutils.TablesFromString(flagTables)
+			tablesFromString = utils.TablesFromString(flagTables)
 		}
 
 		// Merging both lists (tables and databases)
@@ -242,11 +242,11 @@ func main() {
 		}
 	}
 
-	// Adding the tasks to the task manager.
+	// Adding the utils to the task manager.
 	// We create one task per table
 	for table, _ := range tablesToParse {
 		t := strings.Split(table, ".")
-		task := tasks.NewTask(
+		task := utils.NewTask(
 			t[0], t[1],
 			dumpOptions.ChunkSize,
 			dumpOptions.OutputChunkSize,

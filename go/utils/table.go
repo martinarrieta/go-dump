@@ -1,4 +1,4 @@
-package sqlutils
+package utils
 
 import (
 	"fmt"
@@ -56,7 +56,7 @@ func (this *Table) AddColumn(column *sql.ColumnType) {
 }
 
 func (this *Table) GetFullName() string {
-	return fmt.Sprintf("%s.%s", this.schema, this.name)
+	return fmt.Sprintf("`%s`.`%s`", this.schema, this.name)
 }
 
 func (this *Table) GetSchema() string {
@@ -67,8 +67,8 @@ func (this *Table) GetName() string {
 	return fmt.Sprintf("`%s`", this.name)
 }
 
-func (this *Table) GetEscapedFullName() string {
-	return fmt.Sprintf("`%s`.`%s`", this.schema, this.name)
+func (this *Table) GetUnescapedFullName() string {
+	return fmt.Sprintf("%s.%s", this.schema, this.name)
 }
 
 func (this *Table) GetColumn(field string) *sql.ColumnType {

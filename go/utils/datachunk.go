@@ -1,4 +1,4 @@
-package tasks
+package utils
 
 import (
 	"bufio"
@@ -7,8 +7,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/martinarrieta/go-dump/go/sqlutils"
 
 	"github.com/outbrain/golib/log"
 )
@@ -85,6 +83,18 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	if this.Task.TaskManager.SkipUseDatabase == false {
 		buffer.WriteString(fmt.Sprintf("USE %s\n", this.Task.Table.GetSchema()))
 	}
+
+	buffer.WriteString("/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n")
+	buffer.WriteString("/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;\n")
+	buffer.WriteString("/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;\n")
+	buffer.WriteString("/*!40101 SET NAMES utf8 */;\n")
+	buffer.WriteString("/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;\n")
+	buffer.WriteString("/*!40103 SET TIME_ZONE='+00:00' */;\n")
+	buffer.WriteString("/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;\n")
+	buffer.WriteString("/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;\n")
+	buffer.WriteString("/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;\n")
+	buffer.WriteString("/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;\n")
+
 	columns, _ := rows.ColumnTypes()
 	buff := make([]interface{}, len(columns))
 	data := make([]interface{}, len(columns))
@@ -97,7 +107,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	for rows.Next() {
 
 		if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {
-			buffer.WriteString(");\n")
+			buffer.WriteString(");\n\n")
 			firstRow = true
 		}
 
@@ -124,7 +134,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 			switch d.(type) {
 			case []byte:
 				buffer.Write([]byte("'"))
-				buffer.Write(sqlutils.ParseString(d))
+				buffer.Write(ParseString(d))
 				buffer.Write([]byte("'"))
 			case int64:
 				buffer.WriteString(strconv.FormatInt(d.(int64), 10))
