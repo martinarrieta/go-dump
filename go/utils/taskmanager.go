@@ -65,13 +65,13 @@ func (this *TaskManager) GetExtraData(key string) interface{} {
 	return this.extraData[key]
 }
 
-func (this *TaskManager) AddTask(t Task) {
+func (this *TaskManager) AddTask(t *Task) {
 	if len(this.tasksPool) == 0 {
 		t.Id = 0
 	} else {
 		t.Id = this.tasksPool[len(this.tasksPool)-1].Id + 1
 	}
-	this.tasksPool = append(this.tasksPool, &t)
+	this.tasksPool = append(this.tasksPool, t)
 }
 
 func (this *TaskManager) GetTasksPool() []*Task {

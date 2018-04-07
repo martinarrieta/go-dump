@@ -251,7 +251,7 @@ func main() {
 			dumpOptions.ChunkSize,
 			dumpOptions.OutputChunkSize,
 			dbtm, &taskManager)
-		taskManager.AddTask(task)
+		taskManager.AddTask(&task)
 		log.Debugf("Table: %+v", task.Table)
 	}
 
