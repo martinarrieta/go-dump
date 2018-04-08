@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/martinarrieta/go-dump/go/utils"
@@ -51,7 +53,7 @@ func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB
 	db, err := sql.Open("mysql", fmt.Sprintf("%s@%s/", userpass, hoststring))
 	err = db.Ping()
 	if err != nil {
-		log.Fatal("Error")
+		log.Fatal("MySQL connection error")
 	}
 
 	return db, nil
@@ -79,6 +81,57 @@ func GetDumpOptions() *DumpOptions {
 	}
 }
 
+func printOption(w io.Writer, f *flag.Flag) {
+	fmt.Fprint(w, "   --", f.Name, "\t", f.Usage)
+
+	if f.DefValue != "" {
+		fmt.Fprint(w, " Default [", f.DefValue, "]")
+	}
+
+	fmt.Fprint(w, "\n")
+
+}
+func PrintUsage(flags map[string]*flag.Flag) {
+
+	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
+	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] "+
+		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] "+
+		"[--version] [--lock-tables] [--channel-buffer-size num] "+
+		"[--chunk-size num] [--tables-without-uniquekey str] [--threads num] "+
+		"[--mysql-user str] [--mysql-password str] [--mysql-host str] "+
+		"[--mysql-port num] [--mysql-socket path] [--add-drop-table] "+
+		"[--master-data] [--output-chunk-size num] [--skip-use-database]\n")
+
+	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the "+
+		"SQL statements to recreate a table. This tool create one file per table per thread "+
+		"in the destination directory\n")
+
+	fmt.Fprint(w, "Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password\n\n")
+
+	fmt.Fprint(w, "Options description\n\n")
+
+	fmt.Fprintln(w, "# General:")
+	for _, opt := range []string{"help", "dry-run", "execute", "debug", "version",
+		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey", "threads"} {
+		printOption(w, flags[opt])
+	}
+
+	fmt.Fprintln(w, "\n# MySQL options:")
+	for _, opt := range []string{"mysql-user", "mysql-password", "mysql-host", "mysql-port", "mysql-socket"} {
+		printOption(w, flags[opt])
+	}
+
+	fmt.Fprintln(w, "\n# Databases or tables to dump:")
+	for _, opt := range []string{"all-databases", "databases", "tables"} {
+		printOption(w, flags[opt])
+	}
+	fmt.Fprintln(w, "\n# Output options:")
+	for _, opt := range []string{"destination", "add-drop-table", "master-data", "output-chunk-size", "skip-use-database"} {
+		printOption(w, flags[opt])
+	}
+	w.Flush()
+}
+
 func main() {
 	startExecution := time.Now()
 
@@ -87,38 +140,37 @@ func main() {
 	dumpOptions := GetDumpOptions()
 
 	flag.StringVar(&flagTables, "tables", "",
-		"List of comma separated tables to dump.\n"+
-			"Each table should have the database name included, "+
-			"for example \"mydb.mytable,mydb2.mytable2\"")
+		"List of comma separated tables to dump. Each table should have the database name included,"+
+			"for example \"mydb.mytable,mydb2.mytable2\".")
 	flag.StringVar(&flagDatabases, "databases", "",
-		"List of comma separated databases to dump")
+		"List of comma separated databases to dump.")
 	flag.BoolVar(&flagAllDatabases, "all-databases", false, "Dump all the databases.")
-	flag.StringVar(&dumpOptions.MySQLHost.HostName, "host",
-		"localhost", "MySQL hostname")
-	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "socket", "",
-		"MySQL socket file")
-	flag.IntVar(&dumpOptions.MySQLHost.Port, "port", 3306, "MySQL port number")
-	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "",
-		"MySQL user name")
-	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "password", "",
-		"MySQL password")
-	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use")
+	flag.StringVar(&dumpOptions.MySQLHost.HostName, "mysql-host",
+		"localhost", "MySQL hostname.")
+	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "mysql-socket", "",
+		"MySQL socket file.")
+	flag.IntVar(&dumpOptions.MySQLHost.Port, "mysql-port", 3306, "MySQL port number")
+	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "root",
+		"MySQL user name.")
+	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "mysql-password", "",
+		"MySQL password.")
+	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use.")
 	flag.Int64Var(&dumpOptions.ChunkSize, "chunk-size", 1000,
-		"Chunk size to get the rows")
+		"Chunk size to get the rows.")
 	flag.Int64Var(&dumpOptions.OutputChunkSize, "output-chunk-size", 0,
-		"Chunk size to output the rows")
+		"Chunk size to output the rows.")
 	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000,
-		"Task channel buffer size")
+		"Task channel buffer size.")
 	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true,
-		"Lock tables to get consistent backup")
+		"Lock tables to get consistent backup.")
 	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error",
-		"Action to have with tables without any primary or unique key.\n"+
-			"Valid actions are: 'error', 'skip', 'single-chunk'.")
+		"Action to have with tables without any primary or unique key. "+
+			"Valid actions are: 'error', 'single-chunk'.")
 	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Display debug information.")
 	flag.StringVar(&dumpOptions.DestinationDir, "destination", "",
-		"Directory to store the dumps")
-	flag.BoolVar(&flagHelp, "help", false, "Display this message")
-	flag.BoolVar(&flagVersion, "version", false, "Display version and exit")
+		"Directory to store the dumps.")
+	flag.BoolVar(&flagHelp, "help", false, "Display this message.")
+	flag.BoolVar(&flagVersion, "version", false, "Display version and exit.")
 	flag.BoolVar(&flagDryRun, "dry-run", false, "Just calculate the number of chaunks per table and display it.")
 	flag.BoolVar(&flagExecute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
@@ -127,10 +179,17 @@ func main() {
 
 	flag.Parse()
 
+	flags := make(map[string]*flag.Flag)
+
+	flag.CommandLine.VisitAll(func(f *flag.Flag) {
+		flags[f.Name] = f
+	})
+
 	if flagHelp == true {
-		flag.Usage()
+		PrintUsage(flags)
 		return
 	}
+
 	if flagVersion == true {
 		fmt.Println("go-dump version:", AppVersion)
 		return
