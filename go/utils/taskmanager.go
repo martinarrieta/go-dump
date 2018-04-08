@@ -84,10 +84,9 @@ func (this *TaskManager) AddWorkerDB(db *sql.DB) {
 }
 
 func (this *TaskManager) lockTables() {
-	for _, task := range this.tasksPool {
-		if err := task.Table.Lock(this.DB); err != nil {
-			log.Fatalf("Error locking table: %s", err.Error())
-		}
+	query := GetLockTablesSQL(this.tasksPool, "READ")
+	if _, err := this.DB.Exec(query); err != nil {
+		log.Criticalf("Error unlocking the tables: %s", err.Error())
 	}
 }
 
@@ -161,7 +160,7 @@ func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 		filename := fmt.Sprintf("%s/%s-definition.sql", this.DestinationDir, task.Table.GetUnescapedFullName())
 		file, _ := os.Create(filename)
 		buffer := bufio.NewWriter(file)
-		if this.SkipUseDatabase == false {
+		if !this.SkipUseDatabase {
 			buffer.WriteString(GetUseDatabaseSQL(task.Table.GetSchema()) + ";\n")
 		}
 
@@ -182,10 +181,10 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 
 	var startLocking time.Time
 
-	if lockTables == true {
+	if lockTables {
 		log.Infof("Locking tables to get a consistent backup.")
 		startLocking = time.Now()
-		if allDatabases == true {
+		if allDatabases {
 			this.lockAllTables()
 		} else {
 			this.lockTables()
@@ -196,12 +195,12 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 	this.createWorkers()
 
 	// GET MASTER DATA
-	if this.GetMasterStatus == true {
+	if this.GetMasterStatus {
 		this.getReplicationData()
 	}
 	log.Debugf("Added %d transactions", len(this.workersDB))
 
-	if lockTables == true {
+	if lockTables {
 		this.unlockTables()
 		lockedTime := time.Since(startLocking)
 		log.Infof("Unlocking the tables. Tables were locked for %s", lockedTime)

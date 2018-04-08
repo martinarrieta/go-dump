@@ -23,11 +23,11 @@ type DataChunk struct {
 
 // GetWhereSQL return the where condition for a chunk
 func (this *DataChunk) GetWhereSQL() string {
-	if this.IsSingleChunk == true {
+	if this.IsSingleChunk {
 		return ""
 	}
 
-	if this.IsLastChunk == true {
+	if this.IsLastChunk {
 		return fmt.Sprintf("WHERE %s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
 	} else {
 		return fmt.Sprintf("WHERE %s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
@@ -47,17 +47,13 @@ func (this *DataChunk) GetSampleSQL() string {
 
 func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 
-	//if this.skipUseDatabase == false {
-	//	fmt.Fprintln(fileDescriptors[tablename], fmt.Sprintf("USE %s\n", chunk.Task.Table.GetSchema()))
-	//}
-
 	var rows *sql.Rows
 	var err error
-	if this.IsSingleChunk == true {
+	if this.IsSingleChunk {
 		log.Debugf("Is single chunk %s.", this.Task.Table.GetFullName())
 		rows, err = stmt.Query()
 	} else {
-		if this.IsLastChunk == true {
+		if this.IsLastChunk {
 			rows, err = stmt.Query(this.Min)
 			log.Debugf("Last chunk %s.", this.Task.Table.GetFullName())
 		} else {
@@ -74,13 +70,13 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	//r := sqlutils.NewRowsParser(rows, this.Task.Table)
 	buffer := bufio.NewWriter(file)
 
-	if this.IsSingleChunk == true {
+	if this.IsSingleChunk {
 		buffer.WriteString(fmt.Sprintf("-- Single chunk on %s\n", tablename))
 	} else {
 		buffer.WriteString(fmt.Sprintf("-- Chunk %d - from %d to %d\n",
 			this.Sequence, this.Min, this.Max))
 	}
-	if this.Task.TaskManager.SkipUseDatabase == false {
+	if !this.Task.TaskManager.SkipUseDatabase {
 		buffer.WriteString(fmt.Sprintf("USE %s\n", this.Task.Table.GetSchema()))
 	}
 
@@ -111,7 +107,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 			firstRow = true
 		}
 
-		if firstRow == true {
+		if firstRow {
 			buffer.WriteString(fmt.Sprintf("INSERT INTO %s VALUES \n(", this.Task.Table.GetName()))
 		}
 		err = rows.Scan(buff...)
@@ -122,7 +118,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 		if err != nil {
 			fmt.Println("error:", err)
 		}
-		if firstRow == false {
+		if !firstRow {
 			buffer.WriteString("),\n(")
 		} else {
 			firstRow = false

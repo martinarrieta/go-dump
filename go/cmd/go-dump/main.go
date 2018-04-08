@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -20,17 +19,6 @@ import (
 	"github.com/outbrain/golib/log"
 )
 
-type MySQLHost struct {
-	HostName   string
-	SocketFile string
-	Port       int
-}
-
-type MySQLCredentials struct {
-	User     string
-	Password string
-}
-
 // WaitGroup for the creation of the chunks
 var wgCreateChunks sync.WaitGroup
 
@@ -39,29 +27,9 @@ var wgProcessChunks sync.WaitGroup
 
 const AppVersion string = "0.01"
 
-// GetMySQLConnection return the string to connect to the mysql server
-func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB, error) {
-	var hoststring, userpass string
-	userpass = fmt.Sprintf("%s:%s", credentials.User, credentials.Password)
-
-	if len(host.SocketFile) > 0 {
-		hoststring = fmt.Sprintf("unix(%s)", host.SocketFile)
-	} else {
-		hoststring = fmt.Sprintf("tcp(%s:%d)", host.HostName, host.Port)
-	}
-
-	db, err := sql.Open("mysql", fmt.Sprintf("%s@%s/", userpass, hoststring))
-	err = db.Ping()
-	if err != nil {
-		log.Fatal("MySQL connection error")
-	}
-
-	return db, nil
-}
-
 type DumpOptions struct {
-	MySQLHost             *MySQLHost
-	MySQLCredentials      *MySQLCredentials
+	MySQLHost             *utils.MySQLHost
+	MySQLCredentials      *utils.MySQLCredentials
 	Threads               int
 	ChunkSize             int64
 	OutputChunkSize       int64
@@ -76,8 +44,8 @@ type DumpOptions struct {
 
 func GetDumpOptions() *DumpOptions {
 	return &DumpOptions{
-		MySQLHost:        new(MySQLHost),
-		MySQLCredentials: new(MySQLCredentials),
+		MySQLHost:        new(utils.MySQLHost),
+		MySQLCredentials: new(utils.MySQLCredentials),
 	}
 }
 
@@ -185,12 +153,12 @@ func main() {
 		flags[f.Name] = f
 	})
 
-	if flagHelp == true {
+	if flagHelp {
 		PrintUsage(flags)
 		return
 	}
 
-	if flagVersion == true {
+	if flagVersion {
 		fmt.Println("go-dump version:", AppVersion)
 		return
 	}
@@ -245,7 +213,7 @@ func main() {
 	// Setting up the concurrency to use.
 	runtime.GOMAXPROCS(dumpOptions.Threads)
 
-	tmdb, err := GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+	tmdb, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 	if err != nil {
 		log.Critical("Error whith the database connection. %s", err.Error())
 	}
@@ -264,15 +232,15 @@ func main() {
 	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
 
-	dbtm, err := GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
-	dbchunks, err := GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+	dbtm, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+	dbchunks, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 
 	if err != nil {
 		log.Critical("Error whith the database connection. %s", err.Error())
 	}
 	log.Debug("Error TablesFromDatabase: ", err)
 
-	if flagAllDatabases == true {
+	if flagAllDatabases {
 		tablesToParse = utils.TablesFromAllDatabases(dbchunks)
 	} else {
 		if len(flagDatabases) > 0 {
@@ -318,7 +286,7 @@ func main() {
 
 	// Creating the workers. One per thread from the parameters.
 	for i := 0; i < dumpOptions.Threads; i++ {
-		conn, err := GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+		conn, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 		if err != nil {
 			log.Critical("Error whith the database connection. %s", err.Error())
 		}
@@ -331,20 +299,20 @@ func main() {
 
 	go taskManager.CreateChunks(dbchunks)
 
-	if flagDryRun == true && flagExecute == true {
+	if flagDryRun && flagExecute {
 		log.Fatalf("Flags --dry-run and --execute are mutually exclusive")
 
 	}
 	go taskManager.PrintStatus()
 
-	if flagDryRun == true {
+	if flagDryRun {
 		go taskManager.CleanChunkChannel()
 		taskManager.CreateChunksWaitGroup.Wait()
 		close(taskManager.ChunksChannel)
 		taskManager.DisplaySummary()
 	}
 
-	if flagExecute == true {
+	if flagExecute {
 
 		taskManager.GetTransactions(dumpOptions.LockTables, flagAllDatabases)
 		if err := os.MkdirAll(dumpOptions.DestinationDir, 0755); err != nil {

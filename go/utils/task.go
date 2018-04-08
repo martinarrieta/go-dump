@@ -66,17 +66,17 @@ func (this *Task) CreateChunks(db *sql.DB) {
 	if len(this.Table.GetPrimaryOrUniqueKey()) == 0 {
 		switch this.TaskManager.TablesWithoutPKOption {
 		case "single-chunk":
-			log.Debugf("Table %s doesn't have any primary or unique key, "+
-				"we will make it in a single chunk.", this.Table.GetFullName())
+			log.Debugf(`Table %s doesn't have any primary or unique key,
+				we will make it in a single chunk.`, this.Table.GetFullName())
 			this.AddChunk(NewSingleDataChunk(this))
 			stopLoop = true
 		case "error":
-			log.Fatalf("The table %s doesn't have any primary or unique key and the"+
-				" --tables-without-uniquekey is \"error\"", this.Table.GetFullName())
+			log.Fatalf(`The table %s doesn't have any primary or unique key and the
+				 --tables-without-uniquekey is \"error\"`, this.Table.GetFullName())
 		}
 	}
 
-	for stopLoop == false {
+	for !stopLoop {
 
 		err := tx.QueryRow(this.GetChunkSqlQuery()).Scan(&chunkMax)
 		if err != nil && err == sql.ErrNoRows {
