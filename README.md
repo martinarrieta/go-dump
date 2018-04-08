@@ -23,60 +23,64 @@ go-dump uses the [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_c
 The parameters and options are listed here:
 
 ```
-# go-dump --help
-  -add-drop-table
-    	Add drop table before create table.
-  -all-databases
-    	Dump all the databases.
-  -channel-buffer-size int
-    	Task channel buffer size (default 1000)
-  -chunk-size int
-    	Chunk size to get the rows (default 1000)
-  -databases string
-    	List of comma separated databases to dump
-  -debug
-    	Display debug information.
-  -destination string
-    	Directory to store the dumps
-  -dry-run
-    	Just calculate the number of chaunks per table and display it.
-  -execute
-    	Execute the dump.
-  -help
-    	Display this message
-  -host string
-    	MySQL hostname (default "localhost")
-  -lock-tables
-    	Lock tables to get consistent backup (default true)
-  -master-data
-    	Get the master data. (default true)
-  -mysql-user string
-    	MySQL user name
-  -output-chunk-size int
-    	Chunk size to output the rows
-  -password string
-    	MySQL password
-  -port int
-    	MySQL port number (default 3306)
-  -skip-use-database
-    	Skip USE "database" in the dump.
-  -socket string
-    	MySQL socket file
-  -tables string
-    	List of comma separated tables to dump.
-    	Each table should have the database name included, for example "mydb.mytable,mydb2.mytable2"
-  -tables-without-uniquekey string
-    	Action to have with tables without any primary or unique key.
-    	Valid actions are: 'error', 'skip', 'single-chunk'. (default "error")
-  -threads int
-    	Number of threads to use (default 1)
-  -version
-    	Display version and exit
+Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--version] [--lock-tables] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--master-data] [--output-chunk-size num] [--skip-use-database]
+
+go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory
+
+Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password
+
+Options description
+
+# General:
+   --help                     Display this message. Default [false]
+   --dry-run                  Just calculate the number of chaunks per table and display it. Default [false]
+   --execute                  Execute the dump. Default [false]
+   --debug                    Display debug information. Default [false]
+   --version                  Display version and exit. Default [false]
+   --lock-tables              Lock tables to get consistent backup. Default [true]
+   --channel-buffer-size      Task channel buffer size. Default [1000]
+   --chunk-size               Chunk size to get the rows. Default [1000]
+   --tables-without-uniquekey Action to have with tables without any primary or unique key. Valid actions are: 'error', 'single-chunk'. Default [error]
+   --threads                  Number of threads to use. Default [1]
+
+# MySQL options:
+   --mysql-user               MySQL user name. Default [root]
+   --mysql-password           MySQL password.
+   --mysql-host               MySQL hostname. Default [localhost]
+   --mysql-port               MySQL port number Default [3306]
+   --mysql-socket             MySQL socket file.
+
+# Databases or tables to dump:
+   --all-databases            Dump all the databases. Default [false]
+   --databases                List of comma separated databases to dump.
+   --tables                   List of comma separated tables to dump. Each table should have the database name included,for example "mydb.mytable,mydb2.mytable2".
+
+# Output options:
+   --destination              Directory to store the dumps.
+   --add-drop-table           Add drop table before create table. Default [false]
+   --master-data              Get the master data. Default [true]
+   --output-chunk-size        Chunk size to output the rows. Default [0]
+   --skip-use-database        Skip USE "database" in the dump. Default [false]
 ```
 
 ## Examples
 
-```go-dump --threads 8 --chunk-size 50000 --output-chunk-size 1000  --channel-buffer-size  2000 --tables-without-uniquekey "single-chunk" --add-drop-table  --databases "test" --mysql-user root --destination /tmp/testbackup   --execute   --skip-use-database ```
+```
+go-dump --threads 8 --chunk-size 50000 --output-chunk-size 1000  --channel-buffer-size  2000 --tables-without-uniquekey "single-chunk" --add-drop-table  --databases "test" --mysql-user root --destination /tmp/testbackup   --execute   --skip-use-database
+
+2018-04-08 01:40:44 INFO Locking tables to get a consistent backup.
+2018-04-08 01:40:44 INFO Getting Master Status
+2018-04-08 01:40:44 INFO Cols [File Position Binlog_Do_DB Binlog_Ignore_DB Executed_Gtid_Set]
+2018-04-08 01:40:44 INFO Master File: binlog.000008
+Master Position: 154
+2018-04-08 01:40:44 INFO Unlocking the tables. Tables were locked for 5.197763ms
+2018-04-08 01:40:44 INFO Starting 8 workers
+2018-04-08 01:40:46 INFO Status. Queue: 0 of 80
+2018-04-08 01:40:49 INFO Status. Queue: 50 of 120
+2018-04-08 01:40:54 INFO Status. Queue: 10 of 120
+2018-04-08 01:41:00 INFO Waiting for the creation of all the chunks.
+2018-04-08 01:41:00 INFO Execution time: 15.498141583s
+```
 
 Explanation of this command:
 
