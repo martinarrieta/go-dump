@@ -8,10 +8,12 @@ var task1 = Task{
 	OutputChunkSize: 100,
 	TaskManager:     &taskManager}
 var task2 = Task{
-	Table:           table1,
+	Table:           table2,
 	ChunkSize:       1000,
 	OutputChunkSize: 100,
 	TaskManager:     &taskManager}
+
+var tasksPool = []*Task{&task1, &task2}
 
 type TaskTest struct {
 	table                      *Table
@@ -76,5 +78,13 @@ func TestTaskGetLastChunkSqlQuery(t *testing.T) {
 		if query != tt.expect {
 			t.Errorf("Error: got \n\"%s\" instead of \n\"%s\"", query, tt.expect)
 		}
+	}
+}
+
+func TestGetLockTablesSQL(t *testing.T) {
+	query := GetLockTablesSQL(tasksPool, "READ")
+	expect := "LOCK TABLES  `schema1`.`table1` READ, `schema2`.`table2` READ"
+	if query != expect {
+		t.Errorf("Error: got \n\"%s\" instead of \n\"%s\"", query, expect)
 	}
 }
