@@ -102,8 +102,9 @@ func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
 	databases := strings.Split(databasesParam, ",")
 
 	query := fmt.Sprintf(`SELECT TABLE_SCHEMA, TABLE_NAME
-		FROM information_schema.TABLES WHERE TABLE_SCHEMA IN('%s') AND TABLE_TYPE ='BASE TABLE'  AND
-		NOT (TABLE_SCHEMA = 'mysql' AND TABLE_NAME NOT IN ( 'slow_log' , 'general_log'))`, strings.Join(databases, "','"))
+		FROM information_schema.TABLES WHERE TABLE_SCHEMA IN('%s')
+		AND TABLE_TYPE ='BASE TABLE' AND NOT (TABLE_SCHEMA = 'mysql'
+		AND TABLE_NAME NOT IN ('slow_log','general_log'))`, strings.Join(databases, "','"))
 
 	log.Debug("Query: ", query)
 	return getTablesFromQuery(query, db)
