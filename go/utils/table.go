@@ -2,7 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/outbrain/golib/log"
 
 	"database/sql"
 )
@@ -12,8 +13,9 @@ type ColumnsMap map[string]int
 type Table struct {
 	name            string
 	schema          string
-	primaryKey      string
-	uniqueKey       string
+	primaryKey      []string
+	uniqueKey       []string
+	keyForChunks    string
 	columnTypes     []*sql.ColumnType
 	columnsOrdinals ColumnsMap
 	createSQL       string
@@ -67,6 +69,14 @@ func (this *Table) GetName() string {
 	return fmt.Sprintf("`%s`", this.name)
 }
 
+func (this *Table) GetUnescapedSchema() string {
+	return fmt.Sprintf("%s", this.schema)
+}
+
+func (this *Table) GetUnescapedName() string {
+	return fmt.Sprintf("%s", this.name)
+}
+
 func (this *Table) GetUnescapedFullName() string {
 	return fmt.Sprintf("%s.%s", this.schema, this.name)
 }
@@ -76,12 +86,19 @@ func (this *Table) GetColumn(field string) *sql.ColumnType {
 }
 
 func (this *Table) GetPrimaryOrUniqueKey() string {
-	if len(this.primaryKey) > 0 {
-		return this.primaryKey
+
+	if len(this.keyForChunks) > 0 {
+		return this.keyForChunks
+	}
+
+	if len(this.primaryKey) == 1 {
+		this.keyForChunks = this.primaryKey[0]
+		return this.keyForChunks
 	}
 
 	if len(this.uniqueKey) > 0 {
-		return this.uniqueKey
+		this.keyForChunks = this.uniqueKey[0]
+		return this.keyForChunks
 	}
 
 	return ""
@@ -89,23 +106,26 @@ func (this *Table) GetPrimaryOrUniqueKey() string {
 
 func (this *Table) getTableData(db *sql.DB) error {
 
-	rows, err := db.Query(GetShowColumnsTableSQL(this.GetFullName()))
+	rows, err := db.Query(GetShowColumnsTableSQL(this))
 
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal("Error getting column details for table ", this.GetFullName(), " : ", err.Error())
 	}
 
-	var fName, fType, fNull, fKey, fDefault, fExtra string
+	var cName, cKey string
 
 	for rows.Next() {
-		rows.Scan(&fName, &fType, &fNull, &fKey, &fDefault, &fExtra)
-		if fKey == "PRI" {
-			this.primaryKey = fName
-		}
-		if fKey == "UNIQUE" {
-			this.uniqueKey = fName
+		rows.Scan(&cName, &cKey)
+		switch cKey {
+		case "PRI":
+			this.primaryKey = append(this.primaryKey, cName)
+		case "UNI":
+			this.uniqueKey = append(this.uniqueKey, cName)
+		default:
+
 		}
 	}
+
 	var tableName, tableSQL string
 	err = db.QueryRow(GetShowCreateTableSQL(this.GetFullName())).Scan(&tableName, &tableSQL)
 	this.setExtra("tableSQL", tableSQL)

@@ -6,19 +6,19 @@ var table1 = &Table{
 	name:       "table1",
 	schema:     "schema1",
 	IsLocked:   false,
-	primaryKey: "pk",
+	primaryKey: []string{"pk"},
 }
 var table2 = &Table{
 	name:       "table2",
 	schema:     "schema2",
 	IsLocked:   false,
-	primaryKey: "pk",
+	primaryKey: []string{"pk"},
 }
 var table3 = &Table{
 	name:      "table3",
 	schema:    "schema3",
 	IsLocked:  false,
-	uniqueKey: "uk",
+	uniqueKey: []string{"uk"},
 }
 
 func TestTable(t *testing.T) {
