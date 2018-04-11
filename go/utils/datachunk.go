@@ -36,8 +36,8 @@ func (this *DataChunk) GetWhereSQL() string {
 
 func (this *DataChunk) GetPrepareSQL() string {
 
-	return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s %s",
-		this.Task.Table.GetFullName(), this.GetWhereSQL())
+	return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s %s ORDER BY %s",
+		this.Task.Table.GetFullName(), this.GetWhereSQL(), this.Task.Table.GetPrimaryOrUniqueKey())
 
 }
 
