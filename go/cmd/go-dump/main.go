@@ -31,8 +31,8 @@ type DumpOptions struct {
 	MySQLHost             *utils.MySQLHost
 	MySQLCredentials      *utils.MySQLCredentials
 	Threads               int
-	ChunkSize             int64
-	OutputChunkSize       int64
+	ChunkSize             uint64
+	OutputChunkSize       uint64
 	ChannelBufferSize     int
 	LockTables            bool
 	Debug                 bool
@@ -123,9 +123,9 @@ func main() {
 	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "mysql-password", "",
 		"MySQL password.")
 	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use.")
-	flag.Int64Var(&dumpOptions.ChunkSize, "chunk-size", 1000,
+	flag.Uint64Var(&dumpOptions.ChunkSize, "chunk-size", 1000,
 		"Chunk size to get the rows.")
-	flag.Int64Var(&dumpOptions.OutputChunkSize, "output-chunk-size", 0,
+	flag.Uint64Var(&dumpOptions.OutputChunkSize, "output-chunk-size", 0,
 		"Chunk size to output the rows.")
 	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000,
 		"Task channel buffer size.")
@@ -278,6 +278,7 @@ func main() {
 			dumpOptions.ChunkSize,
 			dumpOptions.OutputChunkSize,
 			dbtm, &taskManager)
+		task.PrintInfo()
 		taskManager.AddTask(&task)
 		log.Debugf("Table: %+v", task.Table)
 	}

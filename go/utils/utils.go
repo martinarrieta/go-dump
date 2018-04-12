@@ -138,6 +138,7 @@ func GetShowCreateTableSQL(table string) string {
 	return fmt.Sprintf("SHOW CREATE TABLE %s", table)
 }
 
+/*
 func GetShowColumnsTableSQL(table *Table) string {
 	return fmt.Sprintf(`SELECT COLUMN_NAME,COLUMN_KEY
 		FROM INFORMATION_SCHEMA.COLUMNS
@@ -146,7 +147,7 @@ func GetShowColumnsTableSQL(table *Table) string {
 			AND DATA_TYPE IN ('tinyint','smallint','int','mediumint','bigint','timestamp')
 			`, table.GetUnescapedSchema(), table.GetUnescapedName())
 }
-
+*/
 type MySQLHost struct {
 	HostName   string
 	SocketFile string

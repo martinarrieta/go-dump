@@ -15,7 +15,7 @@ import (
 type DataChunk struct {
 	Min           int64
 	Max           int64
-	Sequence      int64
+	Sequence      uint64
 	Task          *Task
 	IsSingleChunk bool
 	IsLastChunk   bool
@@ -28,16 +28,24 @@ func (this *DataChunk) GetWhereSQL() string {
 	}
 
 	if this.IsLastChunk {
-		return fmt.Sprintf("WHERE %s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
+		return fmt.Sprintf(" WHERE %s >= ?", this.Task.Table.GetPrimaryOrUniqueKey())
 	} else {
-		return fmt.Sprintf("WHERE %s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
+		return fmt.Sprintf(" WHERE %s BETWEEN ? AND ?", this.Task.Table.GetPrimaryOrUniqueKey())
 	}
+}
+
+func (this *DataChunk) GetOrderBYSQL() string {
+	if this.IsSingleChunk {
+		return ""
+	}
+
+	return fmt.Sprintf(" ORDER BY %s", this.Task.Table.GetPrimaryOrUniqueKey())
 }
 
 func (this *DataChunk) GetPrepareSQL() string {
 
-	return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s %s ORDER BY %s",
-		this.Task.Table.GetFullName(), this.GetWhereSQL(), this.Task.Table.GetPrimaryOrUniqueKey())
+	return fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ * FROM %s%s%s",
+		this.Task.Table.GetFullName(), this.GetWhereSQL(), this.GetOrderBYSQL())
 
 }
 
@@ -99,7 +107,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	}
 	firstRow := true
 
-	var rowsNumber = int64(0)
+	var rowsNumber = uint64(0)
 	for rows.Next() {
 
 		if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {

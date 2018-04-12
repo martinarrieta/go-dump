@@ -17,7 +17,7 @@ var tasksPool = []*Task{&task1, &task2}
 
 type TaskTest struct {
 	table                      *Table
-	chunkSize, outputChunkSize int64
+	chunkSize, outputChunkSize uint64
 	chunkMax, chunkMin         int64
 	expect                     string
 }
