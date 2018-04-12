@@ -171,7 +171,7 @@ func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 			buffer.WriteString(GetDropTableIfExistSQL(task.Table.GetName()) + ";\n")
 		}
 
-		buffer.WriteString(task.Table.GetExtra("tableSQL").(string) + ";\n")
+		buffer.WriteString(task.Table.CreateTableSQL + ";\n")
 
 		buffer.Flush()
 	}
@@ -269,7 +269,7 @@ func (this *TaskManager) StartWorker(workerId int) {
 		}
 
 		if err != nil {
-			log.Fatalf("%s", err.Error())
+			log.Fatalf("Error starting the worker. Query: %s, Error: %s.", query, err.Error())
 		}
 
 		tablename := chunk.Task.Table.GetUnescapedFullName()

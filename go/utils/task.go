@@ -9,13 +9,13 @@ import (
 
 type Task struct {
 	Table           *Table
-	ChunkSize       int64
-	OutputChunkSize int64
+	ChunkSize       uint64
+	OutputChunkSize uint64
 	TaskManager     *TaskManager
 	Tx              *sql.Tx
 	DB              *sql.DB
 	Id              int64
-	TotalChunks     int64
+	TotalChunks     uint64
 	chunkMin        int64
 	chunkMax        int64
 }
@@ -97,10 +97,21 @@ func (this *Task) CreateChunks(db *sql.DB) {
 
 }
 
+func (this *Task) PrintInfo() {
+	var estimatedChunks = int(0)
+	chunks := float64(this.Table.estNumberOfRows) / float64(this.ChunkSize)
+	if chunks > 0 {
+		estimatedChunks = int(chunks + 1)
+	}
+
+	log.Infof("Table: %s Engine: %s Estimated Chunks: %v", this.Table.GetUnescapedFullName(), this.Table.Engine,
+		estimatedChunks)
+}
+
 func NewTask(schema string,
 	table string,
-	chunkSize int64,
-	outputChunkSize int64,
+	chunkSize uint64,
+	outputChunkSize uint64,
 	db *sql.DB,
 	tm *TaskManager) Task {
 	return Task{
