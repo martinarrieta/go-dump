@@ -9,6 +9,35 @@ import (
 	"github.com/outbrain/golib/log"
 )
 
+type DumpOptions struct {
+	MySQLHost             *MySQLHost
+	MySQLCredentials      *MySQLCredentials
+	Threads               int
+	ChunkSize             uint64
+	OutputChunkSize       uint64
+	ChannelBufferSize     int
+	LockTables            bool
+	Debug                 bool
+	TablesWithoutUKOption string
+	DestinationDir        string
+	AddDropTable          bool
+	GetMasterStatus       bool
+	SkipUseDatabase       bool
+	Compress              bool
+	CompressLevel         int
+}
+
+type MySQLHost struct {
+	HostName   string
+	SocketFile string
+	Port       int
+}
+
+type MySQLCredentials struct {
+	User     string
+	Password string
+}
+
 func ParseString(s interface{}) []byte {
 
 	escape := false
@@ -148,16 +177,6 @@ func GetShowColumnsTableSQL(table *Table) string {
 			`, table.GetUnescapedSchema(), table.GetUnescapedName())
 }
 */
-type MySQLHost struct {
-	HostName   string
-	SocketFile string
-	Port       int
-}
-
-type MySQLCredentials struct {
-	User     string
-	Password string
-}
 
 // GetMySQLConnection return the string to connect to the mysql server
 func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB, error) {

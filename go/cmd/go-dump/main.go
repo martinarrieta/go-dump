@@ -27,23 +27,8 @@ var wgProcessChunks sync.WaitGroup
 
 const AppVersion string = "0.01"
 
-type DumpOptions struct {
-	MySQLHost             *utils.MySQLHost
-	MySQLCredentials      *utils.MySQLCredentials
-	Threads               int
-	ChunkSize             uint64
-	OutputChunkSize       uint64
-	ChannelBufferSize     int
-	LockTables            bool
-	Debug                 bool
-	TablesWithoutUKOption string
-	DestinationDir        string
-	GetMasterStatus       bool
-	SkipUseDatabase       bool
-}
-
-func GetDumpOptions() *DumpOptions {
-	return &DumpOptions{
+func GetDumpOptions() *utils.DumpOptions {
+	return &utils.DumpOptions{
 		MySQLHost:        new(utils.MySQLHost),
 		MySQLCredentials: new(utils.MySQLCredentials),
 	}
@@ -68,7 +53,7 @@ func PrintUsage(flags map[string]*flag.Flag) {
 		"[--chunk-size num] [--tables-without-uniquekey str] [--threads num] "+
 		"[--mysql-user str] [--mysql-password str] [--mysql-host str] "+
 		"[--mysql-port num] [--mysql-socket path] [--add-drop-table] "+
-		"[--master-data] [--output-chunk-size num] [--skip-use-database]\n")
+		"[--master-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]\n")
 
 	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the "+
 		"SQL statements to recreate a table. This tool create one file per table per thread "+
@@ -80,7 +65,8 @@ func PrintUsage(flags map[string]*flag.Flag) {
 
 	fmt.Fprintln(w, "# General:")
 	for _, opt := range []string{"help", "dry-run", "execute", "debug", "version",
-		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey", "threads"} {
+		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey",
+		"threads", "compress", "compress-level"} {
 		printOption(w, flags[opt])
 	}
 
@@ -143,7 +129,9 @@ func main() {
 	flag.BoolVar(&flagExecute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
 	flag.BoolVar(&dumpOptions.GetMasterStatus, "master-data", true, "Get the master data.")
-	flag.BoolVar(&flagAddDropTable, "add-drop-table", false, "Add drop table before create table.")
+	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
+	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
+	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 
 	flag.Parse()
 
@@ -174,7 +162,6 @@ func main() {
 	go func() {
 		<-c
 		log.Fatalf("Killing the dumper.")
-
 	}()
 
 	switch dumpOptions.TablesWithoutUKOption {
@@ -186,7 +173,7 @@ func main() {
 	default:
 		log.Fatalf("Error: \"%s\" is not a valid option for --tables-without-pk.",
 			dumpOptions.TablesWithoutUKOption)
-		flag.Usage()
+		PrintUsage(flags)
 	}
 
 	if dumpOptions.DestinationDir == "" {
@@ -197,6 +184,10 @@ func main() {
 	// if the OutputChunkSize is 0
 	if dumpOptions.OutputChunkSize == 0 {
 		dumpOptions.OutputChunkSize = dumpOptions.ChunkSize
+	}
+
+	if dumpOptions.CompressLevel < 1 || dumpOptions.CompressLevel > 9 {
+		log.Fatal("The option --compress-level must be a number between 1 and 9")
 	}
 
 	// Creating the buffer for the channel
@@ -223,11 +214,7 @@ func main() {
 		&wgProcessChunks,
 		cDataChunk,
 		tmdb,
-		dumpOptions.Threads,
-		dumpOptions.DestinationDir,
-		dumpOptions.TablesWithoutUKOption,
-		dumpOptions.SkipUseDatabase,
-		dumpOptions.GetMasterStatus)
+		dumpOptions)
 
 	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
