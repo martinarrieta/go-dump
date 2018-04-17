@@ -48,7 +48,7 @@ func PrintUsage(flags map[string]*flag.Flag) {
 
 	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
 	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] "+
-		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] "+
+		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet]"+
 		"[--version] [--lock-tables] [--channel-buffer-size num] "+
 		"[--chunk-size num] [--tables-without-uniquekey str] [--threads num] "+
 		"[--mysql-user str] [--mysql-password str] [--mysql-host str] "+
@@ -64,7 +64,7 @@ func PrintUsage(flags map[string]*flag.Flag) {
 	fmt.Fprint(w, "Options description\n\n")
 
 	fmt.Fprintln(w, "# General:")
-	for _, opt := range []string{"help", "dry-run", "execute", "debug", "version",
+	for _, opt := range []string{"help", "dry-run", "execute", "debug", "quiet", "version",
 		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey",
 		"threads", "compress", "compress-level"} {
 		printOption(w, flags[opt])
@@ -90,7 +90,7 @@ func main() {
 	startExecution := time.Now()
 
 	var flagTables, flagDatabases string
-	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable bool
+	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable, flagQuiet, flagDebug bool
 	dumpOptions := GetDumpOptions()
 
 	flag.StringVar(&flagTables, "tables", "",
@@ -120,7 +120,7 @@ func main() {
 	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error",
 		"Action to have with tables without any primary or unique key. "+
 			"Valid actions are: 'error', 'single-chunk'.")
-	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Display debug information.")
+	flag.BoolVar(&flagDebug, "debug", false, "Display debug information.")
 	flag.StringVar(&dumpOptions.DestinationDir, "destination", "",
 		"Directory to store the dumps.")
 	flag.BoolVar(&flagHelp, "help", false, "Display this message.")
@@ -132,6 +132,8 @@ func main() {
 	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
 	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
+	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
+	flag.BoolVar(&flagQuiet, "quiet", false, "Do not display INFO messages during the process.")
 
 	flag.Parse()
 
@@ -151,8 +153,10 @@ func main() {
 		return
 	}
 	//Setting debug level
-	if dumpOptions.Debug {
+	if flagDebug {
 		log.SetLevel(log.DEBUG)
+	} else if flagQuiet {
+		log.SetLevel(log.WARNING)
 	} else {
 		log.SetLevel(log.INFO)
 	}

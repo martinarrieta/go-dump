@@ -29,7 +29,8 @@ func NewTaskManager(
 		SkipUseDatabase:        dumpOptions.SkipUseDatabase,
 		GetMasterStatus:        dumpOptions.GetMasterStatus,
 		Compress:               dumpOptions.Compress,
-		CompressLevel:          dumpOptions.CompressLevel}
+		CompressLevel:          dumpOptions.CompressLevel,
+		VerboseLevel:           dumpOptions.VerboseLevel}
 	return tm
 }
 
@@ -50,6 +51,7 @@ type TaskManager struct {
 	GetMasterStatus        bool
 	Compress               bool
 	CompressLevel          int
+	VerboseLevel           int
 }
 
 func (this *TaskManager) AddTask(t *Task) {

@@ -17,7 +17,6 @@ type DumpOptions struct {
 	OutputChunkSize       uint64
 	ChannelBufferSize     int
 	LockTables            bool
-	Debug                 bool
 	TablesWithoutUKOption string
 	DestinationDir        string
 	AddDropTable          bool
@@ -25,6 +24,7 @@ type DumpOptions struct {
 	SkipUseDatabase       bool
 	Compress              bool
 	CompressLevel         int
+	VerboseLevel          int
 }
 
 type MySQLHost struct {
