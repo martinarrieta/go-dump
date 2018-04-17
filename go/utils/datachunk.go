@@ -1,11 +1,9 @@
 package utils
 
 import (
-	"bufio"
 	"database/sql"
 	"fmt"
-	"os"
-	"strconv"
+	"io"
 	"time"
 
 	"github.com/outbrain/golib/log"
@@ -19,6 +17,7 @@ type DataChunk struct {
 	Task          *Task
 	IsSingleChunk bool
 	IsLastChunk   bool
+	buffer        io.Writer
 }
 
 // GetWhereSQL return the where condition for a chunk
@@ -53,7 +52,7 @@ func (this *DataChunk) GetSampleSQL() string {
 	return fmt.Sprintf("SELECT * FROM %s LIMIT 1", this.Task.Table.GetFullName())
 }
 
-func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
+func (this *DataChunk) Parse(stmt *sql.Stmt, buffer *Buffer) error {
 
 	var rows *sql.Rows
 	var err error
@@ -76,28 +75,14 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	tablename := this.Task.Table.GetFullName()
 
 	//r := sqlutils.NewRowsParser(rows, this.Task.Table)
-	buffer := bufio.NewWriter(file)
+	//buffer := bufio.NewWriter(file)
 
 	if this.IsSingleChunk {
-		buffer.WriteString(fmt.Sprintf("-- Single chunk on %s\n", tablename))
+		fmt.Fprintf(buffer, "-- Single chunk on %s\n", tablename)
 	} else {
-		buffer.WriteString(fmt.Sprintf("-- Chunk %d - from %d to %d\n",
-			this.Sequence, this.Min, this.Max))
+		fmt.Fprintf(buffer, "-- Chunk %d - from %d to %d\n",
+			this.Sequence, this.Min, this.Max)
 	}
-	if !this.Task.TaskManager.SkipUseDatabase {
-		buffer.WriteString(fmt.Sprintf("USE %s\n", this.Task.Table.GetSchema()))
-	}
-
-	buffer.WriteString("/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n")
-	buffer.WriteString("/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;\n")
-	buffer.WriteString("/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;\n")
-	buffer.WriteString("/*!40101 SET NAMES utf8 */;\n")
-	buffer.WriteString("/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;\n")
-	buffer.WriteString("/*!40103 SET TIME_ZONE='+00:00' */;\n")
-	buffer.WriteString("/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;\n")
-	buffer.WriteString("/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;\n")
-	buffer.WriteString("/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;\n")
-	buffer.WriteString("/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;\n")
 
 	columns, _ := rows.ColumnTypes()
 	buff := make([]interface{}, len(columns))
@@ -111,12 +96,13 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 	for rows.Next() {
 
 		if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {
-			buffer.WriteString(");\n\n")
+			fmt.Fprintf(buffer, ");\n\n")
+
 			firstRow = true
 		}
 
 		if firstRow {
-			buffer.WriteString(fmt.Sprintf("INSERT INTO %s VALUES \n(", this.Task.Table.GetName()))
+			fmt.Fprintf(buffer, "INSERT INTO %s VALUES \n(", this.Task.Table.GetName())
 		}
 		err = rows.Scan(buff...)
 
@@ -127,7 +113,7 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 			fmt.Println("error:", err)
 		}
 		if !firstRow {
-			buffer.WriteString("),\n(")
+			fmt.Fprintf(buffer, "),\n(")
 		} else {
 			firstRow = false
 		}
@@ -141,22 +127,22 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, file *os.File) error {
 				buffer.Write(ParseString(d))
 				buffer.Write([]byte("'"))
 			case int64:
-				buffer.WriteString(strconv.FormatInt(d.(int64), 10))
+				fmt.Fprintf(buffer, "%d", d)
 			case nil:
 				buffer.Write([]byte("NULL"))
 			case time.Time:
-				buffer.WriteString(d.(time.Time).Format("2009-09-08 03:05:30.000000"))
+				fmt.Fprintf(buffer, "%s", d)
 			default:
 				buffer.Write(d.([]byte))
 			}
 			if i != max-1 {
-				buffer.Write([]byte(","))
+				fmt.Fprintf(buffer, ",")
 			}
 		}
 	}
 	rows.Close()
-	buffer.WriteString(");\n")
-	buffer.Flush()
+	fmt.Fprintf(buffer, ");\n")
+
 	return nil
 }
 

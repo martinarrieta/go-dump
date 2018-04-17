@@ -17,22 +17,20 @@ func NewTaskManager(
 	wgP *sync.WaitGroup,
 	cDC chan DataChunk,
 	db *sql.DB,
-	threads int,
-	dest string,
-	tablesWithoutPKOption string,
-	skipUseDatabase bool,
-	getMasterStatus bool) TaskManager {
+	dumpOptions *DumpOptions) TaskManager {
 	tm := TaskManager{
 		CreateChunksWaitGroup:  wgC,
 		ProcessChunksWaitGroup: wgP,
 		ChunksChannel:          cDC,
 		DB:                     db,
-		ThreadsCount:           threads,
-		DestinationDir:         dest,
-		TablesWithoutPKOption:  tablesWithoutPKOption,
-		SkipUseDatabase:        skipUseDatabase,
-		GetMasterStatus:        getMasterStatus,
-	}
+		ThreadsCount:           dumpOptions.Threads,
+		DestinationDir:         dumpOptions.DestinationDir,
+		TablesWithoutPKOption:  dumpOptions.TablesWithoutUKOption,
+		SkipUseDatabase:        dumpOptions.SkipUseDatabase,
+		GetMasterStatus:        dumpOptions.GetMasterStatus,
+		Compress:               dumpOptions.Compress,
+		CompressLevel:          dumpOptions.CompressLevel,
+		VerboseLevel:           dumpOptions.VerboseLevel}
 	return tm
 }
 
@@ -49,20 +47,11 @@ type TaskManager struct {
 	Queue                  int64
 	DestinationDir         string
 	TablesWithoutPKOption  string
-	extraData              map[string]interface{}
 	SkipUseDatabase        bool
 	GetMasterStatus        bool
-}
-
-func (this *TaskManager) setExtraData(key string, value interface{}) {
-	if this.extraData == nil {
-		this.extraData = make(map[string]interface{})
-	}
-	this.extraData[key] = value
-}
-
-func (this *TaskManager) GetExtraData(key string) interface{} {
-	return this.extraData[key]
+	Compress               bool
+	CompressLevel          int
+	VerboseLevel           int
 }
 
 func (this *TaskManager) AddTask(t *Task) {
@@ -177,6 +166,10 @@ func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 	}
 }
 
+func (this *TaskManager) getMasterStatusBuffer(table *Table, threadID int) {
+
+}
+
 func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 
 	var startLocking time.Time
@@ -196,6 +189,7 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 
 	// GET MASTER DATA
 	if this.GetMasterStatus {
+
 		this.getReplicationData()
 	}
 	log.Debugf("Added %d transactions", len(this.workersDB))
@@ -243,8 +237,10 @@ func (this *TaskManager) CleanChunkChannel() {
 		}
 	}
 }
+
 func (this *TaskManager) StartWorker(workerId int) {
-	fileDescriptors := make(map[string]*os.File)
+	bufferChunk := make(map[string]*Buffer)
+
 	var query string
 	var stmt *sql.Stmt
 	var err error
@@ -273,13 +269,32 @@ func (this *TaskManager) StartWorker(workerId int) {
 		}
 
 		tablename := chunk.Task.Table.GetUnescapedFullName()
-		if _, ok := fileDescriptors[tablename]; !ok {
-			filename := fmt.Sprintf("%s/%s-thread%d.sql", this.DestinationDir, tablename, workerId)
-			fileDescriptors[tablename], _ = os.Create(filename)
+
+		if _, ok := bufferChunk[tablename]; !ok {
+			bufferChunk[tablename] = NewChunkBuffer(&chunk, workerId)
 		}
 
-		chunk.Parse(stmt, fileDescriptors[tablename])
+		buffer := bufferChunk[tablename]
+
+		fmt.Fprintf(buffer, "SET NAMES utf8;\n")
+		fmt.Fprintf(buffer, "SET MAX_ALLOWED_PACKET=1073741824;\n")
+		fmt.Fprintf(buffer, "SET TIME_ZONE='+00:00';\n")
+		fmt.Fprintf(buffer, "SET UNIQUE_CHECKS=0;\n")
+		fmt.Fprintf(buffer, "SET FOREIGN_KEY_CHECKS=0;\n")
+		fmt.Fprintf(buffer, "SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n")
+
+		if !chunk.Task.TaskManager.SkipUseDatabase {
+			fmt.Fprintf(buffer, "USE %s\n", chunk.Task.Table.GetSchema())
+		}
+
+		buffer.Flush()
+
+		chunk.Parse(stmt, buffer)
+
 		stmt.Close()
+	}
+	for _, buffer := range bufferChunk {
+		buffer.Close()
 	}
 	this.workersTx[workerId].Commit()
 	this.ProcessChunksWaitGroup.Done()
@@ -287,7 +302,6 @@ func (this *TaskManager) StartWorker(workerId int) {
 
 func (this *TaskManager) AddChunk(chunk DataChunk) {
 	this.ChunksChannel <- chunk
-
 }
 
 func (this *TaskManager) CreateChunks(db *sql.DB) {

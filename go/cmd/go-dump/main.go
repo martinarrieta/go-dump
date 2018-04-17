@@ -27,23 +27,8 @@ var wgProcessChunks sync.WaitGroup
 
 const AppVersion string = "0.01"
 
-type DumpOptions struct {
-	MySQLHost             *utils.MySQLHost
-	MySQLCredentials      *utils.MySQLCredentials
-	Threads               int
-	ChunkSize             uint64
-	OutputChunkSize       uint64
-	ChannelBufferSize     int
-	LockTables            bool
-	Debug                 bool
-	TablesWithoutUKOption string
-	DestinationDir        string
-	GetMasterStatus       bool
-	SkipUseDatabase       bool
-}
-
-func GetDumpOptions() *DumpOptions {
-	return &DumpOptions{
+func GetDumpOptions() *utils.DumpOptions {
+	return &utils.DumpOptions{
 		MySQLHost:        new(utils.MySQLHost),
 		MySQLCredentials: new(utils.MySQLCredentials),
 	}
@@ -63,12 +48,12 @@ func PrintUsage(flags map[string]*flag.Flag) {
 
 	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
 	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] "+
-		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] "+
+		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet]"+
 		"[--version] [--lock-tables] [--channel-buffer-size num] "+
 		"[--chunk-size num] [--tables-without-uniquekey str] [--threads num] "+
 		"[--mysql-user str] [--mysql-password str] [--mysql-host str] "+
 		"[--mysql-port num] [--mysql-socket path] [--add-drop-table] "+
-		"[--master-data] [--output-chunk-size num] [--skip-use-database]\n")
+		"[--master-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]\n")
 
 	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the "+
 		"SQL statements to recreate a table. This tool create one file per table per thread "+
@@ -79,8 +64,9 @@ func PrintUsage(flags map[string]*flag.Flag) {
 	fmt.Fprint(w, "Options description\n\n")
 
 	fmt.Fprintln(w, "# General:")
-	for _, opt := range []string{"help", "dry-run", "execute", "debug", "version",
-		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey", "threads"} {
+	for _, opt := range []string{"help", "dry-run", "execute", "debug", "quiet", "version",
+		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey",
+		"threads", "compress", "compress-level"} {
 		printOption(w, flags[opt])
 	}
 
@@ -104,7 +90,7 @@ func main() {
 	startExecution := time.Now()
 
 	var flagTables, flagDatabases string
-	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable bool
+	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable, flagQuiet, flagDebug bool
 	dumpOptions := GetDumpOptions()
 
 	flag.StringVar(&flagTables, "tables", "",
@@ -134,7 +120,7 @@ func main() {
 	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error",
 		"Action to have with tables without any primary or unique key. "+
 			"Valid actions are: 'error', 'single-chunk'.")
-	flag.BoolVar(&dumpOptions.Debug, "debug", false, "Display debug information.")
+	flag.BoolVar(&flagDebug, "debug", false, "Display debug information.")
 	flag.StringVar(&dumpOptions.DestinationDir, "destination", "",
 		"Directory to store the dumps.")
 	flag.BoolVar(&flagHelp, "help", false, "Display this message.")
@@ -143,7 +129,11 @@ func main() {
 	flag.BoolVar(&flagExecute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
 	flag.BoolVar(&dumpOptions.GetMasterStatus, "master-data", true, "Get the master data.")
-	flag.BoolVar(&flagAddDropTable, "add-drop-table", false, "Add drop table before create table.")
+	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
+	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
+	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
+	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
+	flag.BoolVar(&flagQuiet, "quiet", false, "Do not display INFO messages during the process.")
 
 	flag.Parse()
 
@@ -163,8 +153,10 @@ func main() {
 		return
 	}
 	//Setting debug level
-	if dumpOptions.Debug {
+	if flagDebug {
 		log.SetLevel(log.DEBUG)
+	} else if flagQuiet {
+		log.SetLevel(log.WARNING)
 	} else {
 		log.SetLevel(log.INFO)
 	}
@@ -174,7 +166,6 @@ func main() {
 	go func() {
 		<-c
 		log.Fatalf("Killing the dumper.")
-
 	}()
 
 	switch dumpOptions.TablesWithoutUKOption {
@@ -186,7 +177,7 @@ func main() {
 	default:
 		log.Fatalf("Error: \"%s\" is not a valid option for --tables-without-pk.",
 			dumpOptions.TablesWithoutUKOption)
-		flag.Usage()
+		PrintUsage(flags)
 	}
 
 	if dumpOptions.DestinationDir == "" {
@@ -197,6 +188,10 @@ func main() {
 	// if the OutputChunkSize is 0
 	if dumpOptions.OutputChunkSize == 0 {
 		dumpOptions.OutputChunkSize = dumpOptions.ChunkSize
+	}
+
+	if dumpOptions.CompressLevel < 1 || dumpOptions.CompressLevel > 9 {
+		log.Fatal("The option --compress-level must be a number between 1 and 9")
 	}
 
 	// Creating the buffer for the channel
@@ -223,11 +218,7 @@ func main() {
 		&wgProcessChunks,
 		cDataChunk,
 		tmdb,
-		dumpOptions.Threads,
-		dumpOptions.DestinationDir,
-		dumpOptions.TablesWithoutUKOption,
-		dumpOptions.SkipUseDatabase,
-		dumpOptions.GetMasterStatus)
+		dumpOptions)
 
 	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
