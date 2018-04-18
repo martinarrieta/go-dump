@@ -8,6 +8,7 @@ var taskManager = TaskManager{
 	TablesWithoutPKOption: "single-chunk",
 	SkipUseDatabase:       true,
 	GetMasterStatus:       true,
+	databaseEngines:       make(map[string]*Table),
 }
 
 func TestTaskmanager(t *testing.T) {

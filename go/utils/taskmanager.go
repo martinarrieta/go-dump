@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -23,6 +24,7 @@ func NewTaskManager(
 		ProcessChunksWaitGroup: wgP,
 		ChunksChannel:          cDC,
 		DB:                     db,
+		databaseEngines:        make(map[string]*Table),
 		ThreadsCount:           dumpOptions.Threads,
 		DestinationDir:         dumpOptions.DestinationDir,
 		TablesWithoutPKOption:  dumpOptions.TablesWithoutUKOption,
@@ -43,6 +45,7 @@ type TaskManager struct {
 	tasksPool              []*Task
 	workersTx              []*sql.Tx
 	workersDB              []*sql.DB
+	databaseEngines        map[string]*Table
 	TotalChunks            int64
 	Queue                  int64
 	DestinationDir         string
@@ -54,6 +57,12 @@ type TaskManager struct {
 	VerboseLevel           int
 }
 
+func (this *TaskManager) addDatabaseEngine(t *Table) {
+	if _, ok := this.databaseEngines[t.Engine]; !ok {
+		this.databaseEngines[t.Engine] = t
+	}
+}
+
 func (this *TaskManager) AddTask(t *Task) {
 	if len(this.tasksPool) == 0 {
 		t.Id = 0
@@ -61,6 +70,7 @@ func (this *TaskManager) AddTask(t *Task) {
 		t.Id = this.tasksPool[len(this.tasksPool)-1].Id + 1
 	}
 	this.tasksPool = append(this.tasksPool, t)
+	this.addDatabaseEngine(t.Table)
 }
 
 func (this *TaskManager) GetTasksPool() []*Task {
@@ -97,8 +107,13 @@ func (this *TaskManager) createWorkers() {
 	for i, dbW := range this.workersDB {
 		//log.Infof("Starting worker %d", i)
 		if this.workersTx[i] == nil {
-			txW, _ := dbW.Begin()
-			txW.Exec("SELECT 1")
+			txW, _ := dbW.BeginTx(context.Background(), &sql.TxOptions{
+				Isolation: sql.LevelRepeatableRead,
+				ReadOnly:  true})
+			for engine, table := range this.databaseEngines {
+				txW.Exec(fmt.Sprintf("SELECT 1 FROM %s LIMIT 1", table.GetFullName()))
+				log.Debugf("Selecting a table from engine: %s", engine)
+			}
 			this.workersTx[i] = txW
 		}
 	}
