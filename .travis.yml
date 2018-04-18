@@ -14,6 +14,7 @@ addons:
 dist: trusty
 
 before_install:
+  - mysql_upgrade -u root 
   - sudo mysql -e "use mysql; update user set authentication_string=PASSWORD('secret') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;"
   - sudo service mysql restart
   - mysql -u root --password="secret" < test/test-user.sql
