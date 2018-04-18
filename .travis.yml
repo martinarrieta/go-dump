@@ -13,9 +13,9 @@ addons:
 
 dist: trusty
 
-sudo: required
-
 before_install:
-  - mysql -u root --password="" < test/test-user.sql
-  - mysql -u root --password="" < test/sakila-schema.sql
-  - mysql -u root --password="" < test/sakila-data.sql
+  - sudo mysql -e "use mysql; update user set authentication_string=PASSWORD('secret') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;"
+  - sudo service mysql restart
+  - mysql -u root --password="secret" < test/test-user.sql
+  - mysql -u root --password="secret" < test/sakila-schema.sql
+  - mysql -u root --password="secret" < test/sakila-data.sql
