@@ -197,13 +197,14 @@ func main() {
 	// Creating the buffer for the channel
 	cDataChunk := make(chan utils.DataChunk, dumpOptions.ChannelBufferSize)
 
-	cores := runtime.NumCPU()
+	/*cores := runtime.NumCPU()
 	if dumpOptions.Threads > cores {
 		log.Warningf("The number of cores available is %d and the number of threads "+
 			"requested were %d.We will set the number of cores to %d.",
 			cores, dumpOptions.Threads, cores)
 		dumpOptions.Threads = cores
 	}
+	*/
 
 	// Setting up the concurrency to use.
 	runtime.GOMAXPROCS(dumpOptions.Threads)

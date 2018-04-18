@@ -19,24 +19,12 @@ type Table struct {
 	columnTypes     []*sql.ColumnType
 	columnsOrdinals ColumnsMap
 	CreateTableSQL  string
-	extra           map[string]interface{}
 	IsLocked        bool
 	Engine          string
 	Collation       string
 	estNumberOfRows uint64
 	estDataSize     uint64
 	estIndexSize    uint64
-}
-
-func (this *Table) setExtra(key string, value interface{}) {
-	if this.extra == nil {
-		this.extra = make(map[string]interface{})
-	}
-	this.extra[key] = value
-}
-
-func (this *Table) GetExtra(key string) interface{} {
-	return this.extra[key]
 }
 
 func (this *Table) Lock(db *sql.DB) error {
