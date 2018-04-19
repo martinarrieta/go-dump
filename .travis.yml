@@ -27,8 +27,8 @@ before_install:
 
 before_deploy:
   - mkdir -p release
-  - "GOOS=linux  GOARCH=amd64 go build -o release/go-dump-$VERSION-linux-amd64"
-  - "GOOS=darwin GOARCH=amd64 go build -o release/go-dump-$VERSION-darwin-amd64"
+  - "GOOS=linux  GOARCH=amd64 go build -o release/go-dump-$VERSION-linux-amd64 go/cmd/go-dump/main.go"
+  - "GOOS=darwin GOARCH=amd64 go build -o release/go-dump-$VERSION-darwin-amd64 go/cmd/go-dump/main.go"
 
 deploy:
   provider: releases
