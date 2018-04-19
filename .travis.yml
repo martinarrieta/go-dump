@@ -3,6 +3,9 @@ go:
   - "1.10"
 services:
   - mysql
+env:
+  global:
+    - VERSION=$(cat VERSION)
 
 addons:
   apt:
@@ -14,9 +17,26 @@ addons:
 dist: trusty
 
 before_install:
-  - mysql_upgrade -u root 
+  - mysql_upgrade -u root
   - sudo mysql -e "use mysql; update user set authentication_string=PASSWORD('secret') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;"
   - sudo service mysql restart
   - mysql -u root --password="secret" < test/test-user.sql
   - mysql -u root --password="secret" < test/sakila-schema.sql
   - mysql -u root --password="secret" < test/sakila-data.sql
+
+
+before_deploy:
+  - mkdir -p release
+  - "GOOS=linux  GOARCH=amd64 go build -o release/go-dump-$VERSION-linux-amd64"
+  - "GOOS=darwin GOARCH=amd64 go build -o release/go-dump-$VERSION-darwin-amd64"
+
+deploy:
+  provider: releases
+  api_key:
+    secure: "XDrlDWABXK7ZDm/Zn+bY8eK67Ld+dDnY4DeWhzJM9b1S7UZmeNbTqO26+Rlmy6hx17riFjvuVK44ntGc8EgQ3eqV7kv1cRNOHs9mZxqKq7Utscjs+R+0YJaMDfCP48jv5rgZGpj6KZr7L//kXdaFy5BN5myDR2GcEV/1ViEtpQxCedhQL/iGC8XCZwefTNlVtS23iqJeTeV5q1AtkUAMNTMrZIz06cnFgET1cn0CYxVhSB9LjBrpX8hYTEbPFNurSgNr29IvFnkNX4j/K3CoFdO1kDBFj4LX3vxgJwet8mmQEbFbTthpKj9K5A1lQVeJ83YBCtnweVuAz20qChBhX74KR3fY7guigC9cm5JJukVjSvpqPzutu+m107rzvmGowEDW6OmRd5lh6gquf+/qVKKYGFp7mGVXVWppD3MIf2msEMbdrEhfsOmEWZmWB6Jea//vLY45ftTNsjM60nbGdAI7SsqNX+PzfaoEQZoD/eIVpwqyI9/yIJsj66MzMsFwMYxc9jNmwTKS9L2t9TP7zhd8nzF/E/am8yrhKIYCQFnq2HEVg16aHVzZnkLzMYuhmj1ZCNb2QfbB2yt0b+RvmyZOl4/mNCnlAVs6GiN0hDmXSnzUj33gVNa1x5Y/13SAr4N8tcMJCg91CjksqMsFKJAuhVXsOgVqq1gl8B2wxTs="
+  file:
+    - "release/gucci-v$VERSION-linux-amd64"
+    - "release/gucci-v$VERSION-darwin-amd64"
+  skip_cleanup: true
+  on:
+    tags: true
