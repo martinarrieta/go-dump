@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -89,10 +90,10 @@ func PrintUsage(flags map[string]*flag.Flag) {
 func main() {
 	startExecution := time.Now()
 
-	var flagTables, flagDatabases string
+	var flagTables, flagDatabases, flagIsolationLevel string
 	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable, flagQuiet, flagDebug bool
 	dumpOptions := GetDumpOptions()
-
+	var consitent = true
 	flag.StringVar(&flagTables, "tables", "",
 		"List of comma separated tables to dump. Each table should have the database name included,"+
 			"for example \"mydb.mytable,mydb2.mytable2\".")
@@ -134,6 +135,11 @@ func main() {
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.BoolVar(&flagQuiet, "quiet", false, "Do not display INFO messages during the process.")
+
+	flag.StringVar(&flagIsolationLevel, "isolation-level", "REPEATABLE READ",
+		"Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
+
+	flag.BoolVar(&dumpOptions.Consistent, "consistent", true, "Get a consistent backup.")
 
 	flag.Parse()
 
@@ -180,10 +186,32 @@ func main() {
 		PrintUsage(flags)
 	}
 
-	if dumpOptions.DestinationDir == "" {
-		log.Fatal("--destination dir is required")
+	if !dumpOptions.LockTables && dumpOptions.Consistent {
+		log.Fatalf("Lock tables is required to get a consitent backup. Use --help for more information.")
 	}
 
+	if dumpOptions.DestinationDir == "" {
+		log.Fatal("--destination dir is required, use --help for more information.")
+	}
+
+	switch strings.ToUpper(flagIsolationLevel) {
+	case "SERIALIZABLE":
+		dumpOptions.IsolationLevel = sql.LevelSerializable
+	case "REPEATABLE READ":
+		dumpOptions.IsolationLevel = sql.LevelRepeatableRead
+	case "READ COMMITTED":
+		dumpOptions.IsolationLevel = sql.LevelReadCommitted
+		consitent = false
+	case "READ UNCOMMITTED":
+		dumpOptions.IsolationLevel = sql.LevelReadUncommitted
+		consitent = false
+	default:
+		log.Fatalf("Unknown issolation level %s. Use --help for more information.", flagIsolationLevel)
+	}
+
+	if !consitent && dumpOptions.Consistent {
+		log.Fatalf("Isolation level \"%s\" is not compatible with the --consitent option. Use --help for more information about both options.")
+	}
 	// Setting OutputChunkSize to the same value as ChunkSize
 	// if the OutputChunkSize is 0
 	if dumpOptions.OutputChunkSize == 0 {

@@ -32,7 +32,8 @@ func NewTaskManager(
 		GetMasterStatus:        dumpOptions.GetMasterStatus,
 		Compress:               dumpOptions.Compress,
 		CompressLevel:          dumpOptions.CompressLevel,
-		VerboseLevel:           dumpOptions.VerboseLevel}
+		VerboseLevel:           dumpOptions.VerboseLevel,
+		IsolationLevel:         dumpOptions.IsolationLevel}
 	return tm
 }
 
@@ -55,6 +56,7 @@ type TaskManager struct {
 	Compress               bool
 	CompressLevel          int
 	VerboseLevel           int
+	IsolationLevel         sql.IsolationLevel
 }
 
 func (this *TaskManager) addDatabaseEngine(t *Table) {
@@ -108,7 +110,7 @@ func (this *TaskManager) createWorkers() {
 		//log.Infof("Starting worker %d", i)
 		if this.workersTx[i] == nil {
 			txW, _ := dbW.BeginTx(context.Background(), &sql.TxOptions{
-				Isolation: sql.LevelRepeatableRead,
+				Isolation: this.IsolationLevel,
 				ReadOnly:  true})
 			for engine, table := range this.databaseEngines {
 				txW.Exec(fmt.Sprintf("SELECT 1 FROM %s LIMIT 1", table.GetFullName()))

@@ -25,6 +25,8 @@ type DumpOptions struct {
 	Compress              bool
 	CompressLevel         int
 	VerboseLevel          int
+	IsolationLevel        sql.IsolationLevel
+	Consistent            bool
 }
 
 type MySQLHost struct {
