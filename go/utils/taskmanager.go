@@ -19,6 +19,7 @@ func NewTaskManager(
 	cDC chan DataChunk,
 	db *sql.DB,
 	dumpOptions *DumpOptions) TaskManager {
+
 	tm := TaskManager{
 		CreateChunksWaitGroup:  wgC,
 		ProcessChunksWaitGroup: wgP,
@@ -33,7 +34,9 @@ func NewTaskManager(
 		Compress:               dumpOptions.Compress,
 		CompressLevel:          dumpOptions.CompressLevel,
 		VerboseLevel:           dumpOptions.VerboseLevel,
-		IsolationLevel:         dumpOptions.IsolationLevel}
+		IsolationLevel:         dumpOptions.IsolationLevel,
+		mySQLHost:              dumpOptions.MySQLHost,
+		mySQLCredentials:       dumpOptions.MySQLCredentials}
 	return tm
 }
 
@@ -57,9 +60,16 @@ type TaskManager struct {
 	CompressLevel          int
 	VerboseLevel           int
 	IsolationLevel         sql.IsolationLevel
+	mySQLHost              *MySQLHost
+	mySQLCredentials       *MySQLCredentials
 }
 
 func (this *TaskManager) addDatabaseEngine(t *Table) {
+
+	if len(this.databaseEngines) == 0 {
+		this.databaseEngines = make(map[string]*Table)
+	}
+
 	if _, ok := this.databaseEngines[t.Engine]; !ok {
 		this.databaseEngines[t.Engine] = t
 	}
@@ -79,6 +89,19 @@ func (this *TaskManager) GetTasksPool() []*Task {
 	return this.tasksPool
 }
 
+func (this *TaskManager) AddWorkersDB() {
+	for i := 0; i < this.ThreadsCount; i++ {
+
+		conn, err := GetMySQLConnection(this.mySQLHost, this.mySQLCredentials)
+		if err != nil {
+			log.Critical("Error whith the database connection. %s", err.Error())
+		}
+		conn.Ping()
+		this.AddWorkerDB(conn)
+	}
+
+}
+
 func (this *TaskManager) AddWorkerDB(db *sql.DB) {
 	this.workersDB = append(this.workersDB, db)
 	this.workersTx = append(this.workersTx, nil)
@@ -86,6 +109,7 @@ func (this *TaskManager) AddWorkerDB(db *sql.DB) {
 
 func (this *TaskManager) lockTables() {
 	query := GetLockTablesSQL(this.tasksPool, "READ")
+
 	if _, err := this.DB.Exec(query); err != nil {
 		log.Criticalf("Error unlocking the tables: %s", err.Error())
 	}
@@ -178,7 +202,6 @@ func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 		}
 
 		buffer.WriteString(task.Table.CreateTableSQL + ";\n")
-
 		buffer.Flush()
 	}
 }
@@ -200,7 +223,6 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 			this.lockTables()
 		}
 	}
-
 	log.Debug("Starting workers")
 	this.createWorkers()
 

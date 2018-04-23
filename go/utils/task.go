@@ -13,7 +13,6 @@ type Task struct {
 	OutputChunkSize uint64
 	TaskManager     *TaskManager
 	Tx              *sql.Tx
-	DB              *sql.DB
 	Id              int64
 	TotalChunks     uint64
 	chunkMin        int64
@@ -31,11 +30,8 @@ func (this *Task) AddChunk(chunk DataChunk) {
 
 func (this *Task) GetChunkSqlQuery() string {
 	keyForChunks := this.Table.GetPrimaryOrUniqueKey()
-	//log.Debugf("Creating chunk for table: %s")
 
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 OFFSET %d",
-		keyForChunks, this.Table.GetFullName(), keyForChunks, this.chunkMax, this.ChunkSize)
-	//log.Debugf("Creating chunk Query: %s", query)
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s >= %d LIMIT 1 OFFSET %d", keyForChunks, this.Table.GetFullName(), keyForChunks, this.chunkMax, this.ChunkSize)
 
 	return query
 }
@@ -66,13 +62,11 @@ func (this *Task) CreateChunks(db *sql.DB) {
 	if len(this.Table.GetPrimaryOrUniqueKey()) == 0 {
 		switch this.TaskManager.TablesWithoutPKOption {
 		case "single-chunk":
-			log.Debugf(`Table %s doesn't have any primary or unique key,
-				we will make it in a single chunk.`, this.Table.GetFullName())
+			log.Debugf(`Table %s doesn't have any primary or unique key, we will make it in a single chunk.`, this.Table.GetFullName())
 			this.AddChunk(NewSingleDataChunk(this))
 			stopLoop = true
 		case "error":
-			log.Fatalf(`The table %s doesn't have any primary or unique key and the
-				 --tables-without-uniquekey is \"error\"`, this.Table.GetFullName())
+			log.Fatalf(`The table %s doesn't have any primary or unique key and the --tables-without-uniquekey is \"error\"`, this.Table.GetFullName())
 		}
 	}
 
@@ -104,20 +98,18 @@ func (this *Task) PrintInfo() {
 		estimatedChunks = int(chunks + 1)
 	}
 
-	log.Infof("Table: %s Engine: %s Estimated Chunks: %v", this.Table.GetUnescapedFullName(), this.Table.Engine,
-		estimatedChunks)
+	log.Infof("Table: %s Engine: %s Estimated Chunks: %v", this.Table.GetUnescapedFullName(), this.Table.Engine, estimatedChunks)
 }
 
 func NewTask(schema string,
 	table string,
 	chunkSize uint64,
 	outputChunkSize uint64,
-	db *sql.DB,
 	tm *TaskManager) Task {
+
 	return Task{
-		Table:           NewTable(schema, table, db),
+		Table:           NewTable(schema, table, tm.DB),
 		ChunkSize:       chunkSize,
 		OutputChunkSize: outputChunkSize,
-		DB:              db,
 		TaskManager:     tm}
 }

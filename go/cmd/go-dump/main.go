@@ -48,20 +48,10 @@ func printOption(w io.Writer, f *flag.Flag) {
 func PrintUsage(flags map[string]*flag.Flag) {
 
 	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] "+
-		"[--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet]"+
-		"[--version] [--lock-tables] [--channel-buffer-size num] "+
-		"[--chunk-size num] [--tables-without-uniquekey str] [--threads num] "+
-		"[--mysql-user str] [--mysql-password str] [--mysql-host str] "+
-		"[--mysql-port num] [--mysql-socket path] [--add-drop-table] "+
-		"[--master-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]\n")
+	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables] [--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--master-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]")
 
-	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the "+
-		"SQL statements to recreate a table. This tool create one file per table per thread "+
-		"in the destination directory\n")
-
+	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory")
 	fmt.Fprint(w, "Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password\n\n")
-
 	fmt.Fprint(w, "Options description\n\n")
 
 	fmt.Fprintln(w, "# General:")
@@ -90,40 +80,31 @@ func PrintUsage(flags map[string]*flag.Flag) {
 func main() {
 	startExecution := time.Now()
 
-	var flagTables, flagDatabases, flagIsolationLevel string
-	var flagHelp, flagVersion, flagDryRun, flagExecute, flagAllDatabases, flagAddDropTable, flagQuiet, flagDebug bool
+	var (
+		flagTables, flagDatabases, flagIsolationLevel string
+		flagHelp, flagVersion, flagDryRun             bool
+		flagExecute, flagAllDatabases                 bool
+		flagAddDropTable, flagQuiet, flagDebug        bool
+	)
+
 	dumpOptions := GetDumpOptions()
 	var consitent = true
-	flag.StringVar(&flagTables, "tables", "",
-		"List of comma separated tables to dump. Each table should have the database name included,"+
-			"for example \"mydb.mytable,mydb2.mytable2\".")
-	flag.StringVar(&flagDatabases, "databases", "",
-		"List of comma separated databases to dump.")
+	flag.StringVar(&flagTables, "tables", "", "List of comma separated tables to dump. Each table should have the database name included, for example \"mydb.mytable,mydb2.mytable2\".")
+	flag.StringVar(&flagDatabases, "databases", "", "List of comma separated databases to dump.")
 	flag.BoolVar(&flagAllDatabases, "all-databases", false, "Dump all the databases.")
-	flag.StringVar(&dumpOptions.MySQLHost.HostName, "mysql-host",
-		"localhost", "MySQL hostname.")
-	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "mysql-socket", "",
-		"MySQL socket file.")
+	flag.StringVar(&dumpOptions.MySQLHost.HostName, "mysql-host", "localhost", "MySQL hostname.")
+	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "mysql-socket", "", "MySQL socket file.")
 	flag.IntVar(&dumpOptions.MySQLHost.Port, "mysql-port", 3306, "MySQL port number")
-	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "root",
-		"MySQL user name.")
-	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "mysql-password", "",
-		"MySQL password.")
+	flag.StringVar(&dumpOptions.MySQLCredentials.User, "mysql-user", "root", "MySQL user name.")
+	flag.StringVar(&dumpOptions.MySQLCredentials.Password, "mysql-password", "", "MySQL password.")
 	flag.IntVar(&dumpOptions.Threads, "threads", 1, "Number of threads to use.")
-	flag.Uint64Var(&dumpOptions.ChunkSize, "chunk-size", 1000,
-		"Chunk size to get the rows.")
-	flag.Uint64Var(&dumpOptions.OutputChunkSize, "output-chunk-size", 0,
-		"Chunk size to output the rows.")
-	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000,
-		"Task channel buffer size.")
-	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true,
-		"Lock tables to get consistent backup.")
-	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error",
-		"Action to have with tables without any primary or unique key. "+
-			"Valid actions are: 'error', 'single-chunk'.")
+	flag.Uint64Var(&dumpOptions.ChunkSize, "chunk-size", 1000, "Chunk size to get the rows.")
+	flag.Uint64Var(&dumpOptions.OutputChunkSize, "output-chunk-size", 0, "Chunk size to output the rows.")
+	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000, "Task channel buffer size.")
+	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true, "Lock tables to get consistent backup.")
+	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error", "Action to have with tables without any primary or unique key. Valid actions are: 'error', 'single-chunk'.")
 	flag.BoolVar(&flagDebug, "debug", false, "Display debug information.")
-	flag.StringVar(&dumpOptions.DestinationDir, "destination", "",
-		"Directory to store the dumps.")
+	flag.StringVar(&dumpOptions.DestinationDir, "destination", "", "Directory to store the dumps.")
 	flag.BoolVar(&flagHelp, "help", false, "Display this message.")
 	flag.BoolVar(&flagVersion, "version", false, "Display version and exit.")
 	flag.BoolVar(&flagDryRun, "dry-run", false, "Just calculate the number of chaunks per table and display it.")
@@ -135,10 +116,7 @@ func main() {
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.BoolVar(&flagQuiet, "quiet", false, "Do not display INFO messages during the process.")
-
-	flag.StringVar(&flagIsolationLevel, "isolation-level", "REPEATABLE READ",
-		"Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
-
+	flag.StringVar(&flagIsolationLevel, "isolation-level", "REPEATABLE READ", "Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
 	flag.BoolVar(&dumpOptions.Consistent, "consistent", true, "Get a consistent backup.")
 
 	flag.Parse()
@@ -251,7 +229,6 @@ func main() {
 	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
 
-	dbtm, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 	dbchunks, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 
 	if err != nil {
@@ -296,7 +273,7 @@ func main() {
 			t[0], t[1],
 			dumpOptions.ChunkSize,
 			dumpOptions.OutputChunkSize,
-			dbtm, &taskManager)
+			&taskManager)
 		task.PrintInfo()
 		taskManager.AddTask(&task)
 		log.Debugf("Table: %+v", task.Table)
@@ -304,15 +281,7 @@ func main() {
 
 	log.Debugf("Added %d connections to the taskManager", dumpOptions.Threads)
 
-	// Creating the workers. One per thread from the parameters.
-	for i := 0; i < dumpOptions.Threads; i++ {
-		conn, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
-		if err != nil {
-			log.Critical("Error whith the database connection. %s", err.Error())
-		}
-		conn.Ping()
-		taskManager.AddWorkerDB(conn)
-	}
+	taskManager.AddWorkersDB()
 
 	// Creating the chunks from the tables.
 	taskManager.CreateChunksWaitGroup.Add(1)

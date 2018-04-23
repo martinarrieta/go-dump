@@ -1,7 +1,7 @@
 -- Sakila Sample Database Data
 -- Version 1.0
 
--- Copyright (c) 2006, 2015, Oracle and/or its affiliates. 
+-- Copyright (c) 2006, 2015, Oracle and/or its affiliates.
 -- All rights reserved.
 
 -- Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -46423,6 +46423,16 @@ COMMIT;
 
 SET AUTOCOMMIT=0;
 INSERT INTO store VALUES (1,1,1,'2006-02-15 04:57:12'),
+(2,2,2,'2006-02-15 04:57:12');
+COMMIT;
+
+
+--
+-- Dumping data for table store_no_pk
+--
+
+SET AUTOCOMMIT=0;
+INSERT INTO store_no_pk VALUES (1,1,1,'2006-02-15 04:57:12'),
 (2,2,2,'2006-02-15 04:57:12');
 COMMIT;
 

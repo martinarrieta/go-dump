@@ -1,19 +1,23 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+)
 
-var task1 = Task{
-	Table:           table1,
-	ChunkSize:       1000,
-	OutputChunkSize: 100,
-	TaskManager:     &taskManager}
-var task2 = Task{
-	Table:           table2,
-	ChunkSize:       1000,
-	OutputChunkSize: 100,
-	TaskManager:     &taskManager}
+var task1 = NewTask("sakila", "city", 1000, 1000, &taskManager)
+var task2 = NewTask("sakila", "country", 1000, 1000, &taskManager)
+var task3 = NewTask("sakila", "store_no_pk", 1000, 1000, &taskManager)
 
-var tasksPool = []*Task{&task1, &task2}
+func TestAddTask(t *testing.T) {
+	taskManager.AddTask(&task1)
+	taskManager.AddTask(&task2)
+	taskManager.AddTask(&task3)
+	tasksPool := taskManager.GetTasksPool()
+	if len(tasksPool) != 3 {
+		t.Fatalf("TaskPool is not 3")
+	}
+
+}
 
 type TaskTest struct {
 	table                      *Table
@@ -25,18 +29,18 @@ type TaskTest struct {
 func TestTaskGetChunkSqlQuery(t *testing.T) {
 
 	var tablesChunk = []TaskTest{
-		{table: table1,
+		{table: task1.Table,
 			chunkSize: 100,
 			chunkMax:  1570,
-			expect:    "SELECT pk FROM `schema1`.`table1` WHERE pk >= 1570 LIMIT 1 OFFSET 100"},
-		{table: table2,
+			expect:    "SELECT city_id FROM `sakila`.`city` WHERE city_id >= 1570 LIMIT 1 OFFSET 100"},
+		{table: task2.Table,
 			chunkSize: 1500,
 			chunkMax:  0,
-			expect:    "SELECT pk FROM `schema2`.`table2` WHERE pk >= 0 LIMIT 1 OFFSET 1500"},
-		{table: table3,
+			expect:    "SELECT country_id FROM `sakila`.`country` WHERE country_id >= 0 LIMIT 1 OFFSET 1500"},
+		{table: task3.Table,
 			chunkSize: 500,
 			chunkMax:  1000,
-			expect:    "SELECT uk FROM `schema3`.`table3` WHERE uk >= 1000 LIMIT 1 OFFSET 500"},
+			expect:    "SELECT manager_staff_id FROM `sakila`.`store_no_pk` WHERE manager_staff_id >= 1000 LIMIT 1 OFFSET 500"},
 	}
 	for _, tt := range tablesChunk {
 		task := Task{
@@ -82,9 +86,7 @@ func TestTaskGetLastChunkSqlQuery(t *testing.T) {
 }
 
 func TestGetLockTablesSQL(t *testing.T) {
-	query := GetLockTablesSQL(tasksPool, "READ")
-	expect := "LOCK TABLES  `schema1`.`table1` READ, `schema2`.`table2` READ"
-	if query != expect {
-		t.Errorf("Error: got \n\"%s\" instead of \n\"%s\"", query, expect)
-	}
+
+	//taskManager.GetTransactions(true, false)
+
 }

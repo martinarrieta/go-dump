@@ -1,7 +1,7 @@
 -- Sakila Sample Database Schema
 -- Version 1.0
 
--- Copyright (c) 2006, 2015, Oracle and/or its affiliates. 
+-- Copyright (c) 2006, 2015, Oracle and/or its affiliates.
 -- All rights reserved.
 
 -- Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
@@ -166,9 +166,9 @@ CREATE TABLE film_category (
 
 --
 -- Table structure for table `film_text`
--- 
+--
 -- InnoDB added FULLTEXT support in 5.6.10. If you use an
--- earlier version, then consider upgrading (recommended) or 
+-- earlier version, then consider upgrading (recommended) or
 -- changing InnoDB to MyISAM as the film_text engine
 --
 
@@ -317,6 +317,23 @@ CREATE TABLE store (
   CONSTRAINT fk_store_staff FOREIGN KEY (manager_staff_id) REFERENCES staff (staff_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_store_address FOREIGN KEY (address_id) REFERENCES address (address_id) ON DELETE RESTRICT ON UPDATE CASCADE
 )ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+--
+-- Table structure for table `store`
+--
+
+CREATE TABLE store_no_pk (
+  store_id TINYINT UNSIGNED NOT NULL,
+  manager_staff_id TINYINT UNSIGNED NOT NULL,
+  address_id SMALLINT UNSIGNED NOT NULL,
+  last_update TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY idx_unique_manager (manager_staff_id),
+  KEY idx_fk_address_id (address_id),
+  CONSTRAINT fk_store_no_pk_staff FOREIGN KEY (manager_staff_id) REFERENCES staff (staff_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT fk_store_no_pk_address FOREIGN KEY (address_id) REFERENCES address (address_id) ON DELETE RESTRICT ON UPDATE CASCADE
+)ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 
 --
 -- View structure for view `customer_list`
@@ -644,5 +661,3 @@ DELIMITER ;
 SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
-
-

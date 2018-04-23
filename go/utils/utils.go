@@ -194,7 +194,7 @@ func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB
 	db, err := sql.Open("mysql", fmt.Sprintf("%s@%s/", userpass, hoststring))
 	err = db.Ping()
 	if err != nil {
-		log.Fatal("MySQL connection error")
+		log.Fatal("MySQL connection error: %s", err.Error())
 	}
 
 	return db, nil

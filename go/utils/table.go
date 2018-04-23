@@ -27,21 +27,6 @@ type Table struct {
 	estIndexSize    uint64
 }
 
-func (this *Table) Lock(db *sql.DB) error {
-	_, err := db.Exec(fmt.Sprintf("LOCK TABLE %s READ", this.GetFullName()))
-	if err == nil {
-		this.IsLocked = true
-	}
-	return err
-}
-func (this *Table) Unlock(db *sql.DB) error {
-	_, err := db.Exec(fmt.Sprintf("UNLOCK TABLES"))
-	if err == nil {
-		this.IsLocked = false
-	}
-	return err
-}
-
 func (this *Table) getColumnsInformationSQL() string {
 	return fmt.Sprintf(`SELECT COLUMN_NAME,COLUMN_KEY
 		FROM INFORMATION_SCHEMA.COLUMNS
@@ -74,14 +59,6 @@ TABLE_COLLATION: latin1_swedish_ci
 CREATE_OPTIONS:
  TABLE_COMMENT:
 */
-
-func (this *Table) GetColumnsSQL() string {
-	return fmt.Sprintf("SHOW COLUMNS FROM %s ", this.GetFullName())
-}
-
-func (this *Table) AddColumn(column *sql.ColumnType) {
-	this.columnTypes = append(this.columnTypes, column)
-}
 
 func (this *Table) GetFullName() string {
 	return fmt.Sprintf("`%s`.`%s`", this.schema, this.name)
@@ -130,6 +107,9 @@ func (this *Table) getTableInformation(db *sql.DB) error {
 
 	var tableName string
 	err := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", this.GetFullName())).Scan(&tableName, &this.CreateTableSQL)
+	if err != nil {
+		log.Fatalf("Error getting show create table: %s", err.Error())
+	}
 
 	query := fmt.Sprintf(`SELECT ENGINE, TABLE_COLLATION, DATA_LENGTH, INDEX_LENGTH,
 		TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES
@@ -137,7 +117,6 @@ func (this *Table) getTableInformation(db *sql.DB) error {
 		this.GetUnescapedSchema(), this.GetUnescapedName())
 	err = db.QueryRow(query).Scan(&this.Engine, &this.Collation,
 		&this.estDataSize, &this.estIndexSize, &this.estNumberOfRows)
-
 	return err
 }
 
@@ -164,7 +143,6 @@ func (this *Table) getData(db *sql.DB) error {
 
 		}
 	}
-
 	return nil
 }
 
@@ -174,6 +152,7 @@ func NewTable(schema string, name string, db *sql.DB) *Table {
 		schema:   schema,
 		IsLocked: false,
 	}
+
 	table.getData(db)
 	return table
 }

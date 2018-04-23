@@ -14,14 +14,14 @@ type ChunksTest struct {
 var chunksTests = []ChunksTest{
 
 	{task: &task1,
-		expectSingleChunkSQL: "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema1`.`table1`",
-		expectLastChunkSQL:   "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema1`.`table1` WHERE pk >= ? ORDER BY pk",
-		expectChunkSQL:       "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema1`.`table1` WHERE pk BETWEEN ? AND ? ORDER BY pk"},
+		expectSingleChunkSQL: "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`city`",
+		expectLastChunkSQL:   "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`city` WHERE city_id >= ? ORDER BY city_id",
+		expectChunkSQL:       "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`city` WHERE city_id BETWEEN ? AND ? ORDER BY city_id"},
 
 	{task: &task2,
-		expectSingleChunkSQL: "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema2`.`table2`",
-		expectLastChunkSQL:   "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema2`.`table2` WHERE pk >= ? ORDER BY pk",
-		expectChunkSQL:       "SELECT /*!40001 SQL_NO_CACHE */ * FROM `schema2`.`table2` WHERE pk BETWEEN ? AND ? ORDER BY pk"},
+		expectSingleChunkSQL: "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`country`",
+		expectLastChunkSQL:   "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`country` WHERE country_id >= ? ORDER BY country_id",
+		expectChunkSQL:       "SELECT /*!40001 SQL_NO_CACHE */ * FROM `sakila`.`country` WHERE country_id BETWEEN ? AND ? ORDER BY country_id"},
 }
 
 func TestNewSingleDataChunk(t *testing.T) {
