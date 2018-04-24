@@ -156,8 +156,7 @@ func (this *TaskManager) getReplicationData() {
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}
-	cols, err := masterRows.Columns()
-	log.Infof("Cols %+v", cols)
+	cols, _ := masterRows.Columns()
 
 	if err != nil {
 		log.Fatalf("%s", err.Error())
@@ -173,16 +172,17 @@ func (this *TaskManager) getReplicationData() {
 		masterRows.Next()
 		err := masterRows.Scan(out...)
 		if err != nil {
-			log.Fatalf("%s", err.Error())
+			log.Fatalf("Error reading Master data information: %s", err.Error())
 		}
 		masterRows.Close()
 		filename := fmt.Sprintf("%s/master-data.sql", this.DestinationDir)
-		log.Infof("Master File: %s\nMaster Position: %d", masterFile, masterPosition)
 		file, _ := os.Create(filename)
 		buffer := bufio.NewWriter(file)
 		buffer.WriteString(fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
 		buffer.Flush()
+		return
 	}
+	log.Fatal("Error storing the master data information.")
 }
 
 func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
