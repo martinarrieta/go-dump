@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,31 +159,61 @@ func (this *TaskManager) getReplicationData() {
 	}
 	cols, _ := masterRows.Columns()
 
+	if len(cols) < 1 {
+		log.Fatal("Error getting the master data information. Make sure that the logs are enabled. If you want to skip the collection of the master information please use the option --master-data=false. Use --help for more information.")
+	}
+	var out []interface{}
+	supportGTID := false
+	//File Position Binlog_Do_DB Binlog_Ignore_DB Executed_Gtid_Set
+
+	for i := 0; i < len(cols); i++ {
+		switch strings.ToUpper(cols[i]) {
+		case "FILE":
+			out = append(out, &masterFile)
+		case "POSITION":
+			out = append(out, &masterPosition)
+		case "BINLOG_DO_DB":
+			out = append(out, &binlogDoDb)
+		case "BINLOG_IGNORE_DB":
+			out = append(out, &binlogIgnoreDB)
+		case "EXECUTED_GTID_SET":
+			supportGTID = true
+			out = append(out, &executedGTIDSet)
+		default:
+			log.Warningf("Unknown option \"%s\" on the Mastet Inforamtion. Please report this bug. MASTER DATA WILL NOT BE AVAILABLE!")
+		}
+		if supportGTID {
+			log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s\n Executed_Gtid_Set: %s ",
+				masterFile, masterPosition, binlogDoDb, binlogIgnoreDB, executedGTIDSet)
+		} else {
+			log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s ",
+				masterFile, masterPosition, binlogDoDb, binlogIgnoreDB)
+		}
+	}
+
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}
-	if len(cols) == 5 {
+	/*
 		out := []interface{}{
 			&masterFile,
 			&masterPosition,
 			&binlogDoDb,
 			&binlogIgnoreDB,
 			&executedGTIDSet,
-		}
-		masterRows.Next()
-		err := masterRows.Scan(out...)
-		if err != nil {
-			log.Fatalf("Error reading Master data information: %s", err.Error())
-		}
-		masterRows.Close()
-		filename := fmt.Sprintf("%s/master-data.sql", this.DestinationDir)
-		file, _ := os.Create(filename)
-		buffer := bufio.NewWriter(file)
-		buffer.WriteString(fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
-		buffer.Flush()
-		return
+		}*/
+	masterRows.Next()
+	err = masterRows.Scan(out...)
+	if err != nil {
+		log.Fatalf("Error reading Master data information: %s", err.Error())
 	}
-	log.Fatal("Error storing the master data information.")
+	masterRows.Close()
+	filename := fmt.Sprintf("%s/master-data.sql", this.DestinationDir)
+	file, _ := os.Create(filename)
+	buffer := bufio.NewWriter(file)
+	buffer.WriteString(fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
+	buffer.Flush()
+
 }
 
 func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
