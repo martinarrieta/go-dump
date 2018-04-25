@@ -37,7 +37,7 @@ var dumpOptions = DumpOptions{
 	Consistent:            true,
 }
 
-var tmdb, err = GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+var tmdb, _ = GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
 
 // Creating the buffer for the channel
 var cDataChunk = make(chan DataChunk, dumpOptions.ChannelBufferSize)

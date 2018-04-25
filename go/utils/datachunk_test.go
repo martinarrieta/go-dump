@@ -3,12 +3,10 @@ package utils
 import "testing"
 
 type ChunksTest struct {
-	task                       *Task
-	chunkSize, outputChunkSize int64
-	chunkMax, chunkMin         int64
-	expectSingleChunkSQL       string
-	expectChunkSQL             string
-	expectLastChunkSQL         string
+	task                 *Task
+	expectSingleChunkSQL string
+	expectChunkSQL       string
+	expectLastChunkSQL   string
 }
 
 var chunksTests = []ChunksTest{

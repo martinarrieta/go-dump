@@ -3,7 +3,6 @@ package utils
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/outbrain/golib/log"
@@ -17,7 +16,6 @@ type DataChunk struct {
 	Task          *Task
 	IsSingleChunk bool
 	IsLastChunk   bool
-	buffer        io.Writer
 }
 
 // GetWhereSQL return the where condition for a chunk

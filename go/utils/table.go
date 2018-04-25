@@ -16,8 +16,6 @@ type Table struct {
 	primaryKey      []string
 	uniqueKey       []string
 	keyForChunks    string
-	columnTypes     []*sql.ColumnType
-	columnsOrdinals ColumnsMap
 	CreateTableSQL  string
 	IsLocked        bool
 	Engine          string
