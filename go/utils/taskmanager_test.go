@@ -2,6 +2,7 @@ package utils
 
 import (
 	"database/sql"
+	"os"
 	"sync"
 	"testing"
 )
@@ -25,7 +26,7 @@ var dumpOptions = DumpOptions{
 	ChannelBufferSize:     1000,
 	LockTables:            true,
 	TablesWithoutUKOption: "single-chunk",
-	DestinationDir:        "/tmp/baskup",
+	DestinationDir:        "/tmp/testbackup",
 	AddDropTable:          true,
 	GetMasterStatus:       true,
 	SkipUseDatabase:       false,
@@ -55,6 +56,9 @@ var taskManager = NewTaskManager(
 	&dumpOptions)
 
 func TestCreateTaskManager(t *testing.T) {
+	if _, err := os.Stat(taskManager.DestinationDir); os.IsNotExist(err) {
+		os.MkdirAll(taskManager.DestinationDir, 0755)
+	}
 	taskManager.AddWorkersDB()
 	taskManager.GetTransactions(true, false)
 }

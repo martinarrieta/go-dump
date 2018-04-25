@@ -1,11 +1,9 @@
 package utils
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -182,63 +180,50 @@ func (this *TaskManager) getReplicationData() {
 		default:
 			log.Warningf("Unknown option \"%s\" on the Mastet Inforamtion. Please report this bug. MASTER DATA WILL NOT BE AVAILABLE!")
 		}
-		if supportGTID {
-			log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s\n Executed_Gtid_Set: %s ",
-				masterFile, masterPosition, binlogDoDb, binlogIgnoreDB, executedGTIDSet)
-		} else {
-			log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s ",
-				masterFile, masterPosition, binlogDoDb, binlogIgnoreDB)
-		}
-	}
 
+	}
+	if supportGTID {
+		log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s\n Executed_Gtid_Set: %s ",
+			masterFile, masterPosition, binlogDoDb, binlogIgnoreDB, executedGTIDSet)
+	} else {
+		log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s ",
+			masterFile, masterPosition, binlogDoDb, binlogIgnoreDB)
+	}
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}
-	/*
-		out := []interface{}{
-			&masterFile,
-			&masterPosition,
-			&binlogDoDb,
-			&binlogIgnoreDB,
-			&executedGTIDSet,
-		}*/
+
 	masterRows.Next()
 	err = masterRows.Scan(out...)
 	if err != nil {
 		log.Fatalf("Error reading Master data information: %s", err.Error())
 	}
 	masterRows.Close()
-	filename := fmt.Sprintf("%s/master-data.sql", this.DestinationDir)
-	file, _ := os.Create(filename)
-	buffer := bufio.NewWriter(file)
-	buffer.WriteString(fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
+	buffer, _ := NewMasterDataBuffer(this)
+
+	fmt.Fprintf(buffer, fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
 	buffer.Flush()
 
 }
 
 func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 	for _, task := range this.tasksPool {
-		filename := fmt.Sprintf("%s/%s-definition.sql", this.DestinationDir, task.Table.GetUnescapedFullName())
-		file, _ := os.Create(filename)
-		buffer := bufio.NewWriter(file)
+		buffer, _ := NewTableDefinitionBuffer(task)
+
 		if !this.SkipUseDatabase {
-			buffer.WriteString(GetUseDatabaseSQL(task.Table.GetSchema()) + ";\n")
+			fmt.Fprintf(buffer, GetUseDatabaseSQL(task.Table.GetSchema())+";\n")
 		}
 
-		buffer.WriteString("/*!40101 SET NAMES binary*/;\n")
-		buffer.WriteString("/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n")
+		fmt.Fprintf(buffer, "/*!40101 SET NAMES binary*/;\n")
+		fmt.Fprintf(buffer, "/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n")
 
 		if addDropTable {
-			buffer.WriteString(GetDropTableIfExistSQL(task.Table.GetName()) + ";\n")
+			fmt.Fprintf(buffer, GetDropTableIfExistSQL(task.Table.GetName())+";\n")
 		}
 
-		buffer.WriteString(task.Table.CreateTableSQL + ";\n")
+		fmt.Fprintf(buffer, task.Table.CreateTableSQL+";\n")
 		buffer.Flush()
 	}
-}
-
-func (this *TaskManager) getMasterStatusBuffer(table *Table, threadID int) {
-
 }
 
 func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
@@ -259,9 +244,9 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 
 	// GET MASTER DATA
 	if this.GetMasterStatus {
-
 		this.getReplicationData()
 	}
+
 	log.Debugf("Added %d transactions", len(this.workersDB))
 
 	if lockTables {
@@ -269,7 +254,6 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 		lockedTime := time.Since(startLocking)
 		log.Infof("Unlocking the tables. Tables were locked for %s", lockedTime)
 	}
-
 }
 
 func (this *TaskManager) StartWorkers() error {
@@ -341,7 +325,7 @@ func (this *TaskManager) StartWorker(workerId int) {
 		tablename := chunk.Task.Table.GetUnescapedFullName()
 
 		if _, ok := bufferChunk[tablename]; !ok {
-			bufferChunk[tablename] = NewChunkBuffer(&chunk, workerId)
+			bufferChunk[tablename], _ = NewChunkBuffer(&chunk, workerId)
 		}
 
 		buffer := bufferChunk[tablename]
@@ -384,4 +368,14 @@ func (this *TaskManager) CreateChunks(db *sql.DB) {
 	this.CreateChunksWaitGroup.Done()
 	log.Debugf("CreateChunksWaitGroup TaskManager Done %v", this.CreateChunksWaitGroup)
 
+}
+
+func (this *TaskManager) GetBufferOptions() *BufferOptions {
+	bufferOptions := new(BufferOptions)
+	if this.Compress {
+		bufferOptions.Compress = true
+		bufferOptions.CompressLevel = this.CompressLevel
+	}
+	bufferOptions.Type = BufferTypeFile
+	return bufferOptions
 }

@@ -169,17 +169,6 @@ func GetShowCreateTableSQL(table string) string {
 	return fmt.Sprintf("SHOW CREATE TABLE %s", table)
 }
 
-/*
-func GetShowColumnsTableSQL(table *Table) string {
-	return fmt.Sprintf(`SELECT COLUMN_NAME,COLUMN_KEY
-		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA='%s' AND TABLE_NAME='%s'
-		  AND COLUMN_KEY IN ('PRI','UNI','MUL')
-			AND DATA_TYPE IN ('tinyint','smallint','int','mediumint','bigint','timestamp')
-			`, table.GetUnescapedSchema(), table.GetUnescapedName())
-}
-*/
-
 // GetMySQLConnection return the string to connect to the mysql server
 func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB, error) {
 	var hoststring, userpass string
