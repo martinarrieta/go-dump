@@ -48,7 +48,7 @@ func printOption(w io.Writer, f *flag.Flag) {
 func PrintUsage(flags map[string]*flag.Flag) {
 
 	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables] [--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--master-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]")
+	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables] [--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--master-data] [--slave-data] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]")
 
 	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory")
 	fmt.Fprint(w, "Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password\n\n")
@@ -71,7 +71,7 @@ func PrintUsage(flags map[string]*flag.Flag) {
 		printOption(w, flags[opt])
 	}
 	fmt.Fprintln(w, "\n# Output options:")
-	for _, opt := range []string{"destination", "add-drop-table", "master-data", "output-chunk-size", "skip-use-database"} {
+	for _, opt := range []string{"destination", "add-drop-table", "master-data", "slave-data", "output-chunk-size", "skip-use-database"} {
 		printOption(w, flags[opt])
 	}
 	w.Flush()
@@ -111,6 +111,7 @@ func main() {
 	flag.BoolVar(&flagExecute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
 	flag.BoolVar(&dumpOptions.GetMasterStatus, "master-data", true, "Get the master data.")
+	flag.BoolVar(&dumpOptions.GetSlaveStatus, "slave-data", false, "Get the slave data.")
 	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
 	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
@@ -302,12 +303,11 @@ func main() {
 	}
 
 	if flagExecute {
-
-		taskManager.GetTransactions(dumpOptions.LockTables, flagAllDatabases)
 		if err := os.MkdirAll(dumpOptions.DestinationDir, 0755); err != nil {
 			log.Fatalf("Error creating directory: %s\n%s",
 				dumpOptions.DestinationDir, err.Error())
 		}
+		taskManager.GetTransactions(dumpOptions.LockTables, flagAllDatabases)
 
 		taskManager.StartWorkers()
 		log.Debugf("ProcessChunksWaitGroup, %+v", taskManager.ProcessChunksWaitGroup)

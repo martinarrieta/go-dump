@@ -29,6 +29,7 @@ var dumpOptions = DumpOptions{
 	DestinationDir:        "/tmp/testbackup",
 	AddDropTable:          true,
 	GetMasterStatus:       true,
+	GetSlaveStatus:        false,
 	SkipUseDatabase:       false,
 	Compress:              false,
 	CompressLevel:         0,
@@ -61,4 +62,5 @@ func TestCreateTaskManager(t *testing.T) {
 	}
 	taskManager.AddWorkersDB()
 	taskManager.GetTransactions(true, false)
+
 }

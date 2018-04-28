@@ -115,3 +115,13 @@ func NewMasterDataBuffer(t *TaskManager) (*Buffer, error) {
 	return NewBuffer(bufferOptions)
 
 }
+
+func NewSlaveDataBuffer(t *TaskManager) (*Buffer, error) {
+	filename := fmt.Sprintf("%s/slave-data.sql", t.DestinationDir)
+
+	bufferOptions := t.GetBufferOptions()
+	bufferOptions.Path = filename
+
+	return NewBuffer(bufferOptions)
+
+}

@@ -30,6 +30,7 @@ func NewTaskManager(
 		TablesWithoutPKOption:  dumpOptions.TablesWithoutUKOption,
 		SkipUseDatabase:        dumpOptions.SkipUseDatabase,
 		GetMasterStatus:        dumpOptions.GetMasterStatus,
+		GetSlaveStatus:         dumpOptions.GetSlaveStatus,
 		Compress:               dumpOptions.Compress,
 		CompressLevel:          dumpOptions.CompressLevel,
 		VerboseLevel:           dumpOptions.VerboseLevel,
@@ -55,6 +56,7 @@ type TaskManager struct {
 	TablesWithoutPKOption  string
 	SkipUseDatabase        bool
 	GetMasterStatus        bool
+	GetSlaveStatus         bool
 	Compress               bool
 	CompressLevel          int
 	VerboseLevel           int
@@ -122,7 +124,7 @@ func (this *TaskManager) unlockTables() {
 }
 
 func (this *TaskManager) lockAllTables() {
-	query := GetFlushTablesWithReadLockSQL()
+	query := GetLockAllTablesSQL()
 	if _, err := this.DB.Exec(query); err != nil {
 		log.Fatalf("Error locking table: %s", err.Error())
 	}
@@ -144,7 +146,95 @@ func (this *TaskManager) createWorkers() {
 	}
 }
 
-func (this *TaskManager) getReplicationData() {
+func (this *TaskManager) isMultiMaster() (bool, error) {
+	_, err := this.DB.Query("SELECT @@default_master_connection")
+	switch err {
+	case sql.ErrNoRows:
+		return false, nil
+	case nil:
+		return true, nil
+	default:
+		return false, err
+	}
+
+}
+
+// getSlaveData collects the slave data from the node that you are taking the backup.
+// It detect if the slave has multi master replication and collect and store the information for all the channels.
+func (this *TaskManager) getSlaveData() {
+	log.Info("Getting Slave Status")
+	isMultiMaster, _ := this.isMultiMaster()
+	var query string
+
+	if isMultiMaster {
+		query = "SHOW ALL SLAVES STATUS"
+	} else {
+		query = "SHOW SLAVE STATUS"
+	}
+	slaveData, err := this.DB.Query(query)
+
+	if err != nil {
+		log.Fatalf("Error getting slave information: %s", err.Error())
+	}
+
+	var connectionName, relayMasterLogFile, masterHost, executedGtidSet, gtidSlavePos string
+	var execMasterLogPos, masterPort uint64
+	var haveGtidSlavePos, haveExecutedGtidSet = false, false
+	cols, _ := slaveData.Columns()
+	var out []interface{}
+	iterations := 0
+
+	for i := 0; i < len(cols); i++ {
+		switch strings.ToUpper(cols[i]) {
+		case "CONNECTION_NAME":
+			out = append(out, &connectionName)
+		case "RELAY_MASTER_LOG_FILE":
+			out = append(out, &relayMasterLogFile)
+		case "MASTER_HOST":
+			out = append(out, &masterHost)
+		case "MASTER_PORT":
+			out = append(out, &masterPort)
+		case "EXECUTED_GTID_SET":
+			haveExecutedGtidSet = true
+			out = append(out, &executedGtidSet)
+		case "GTID_SLAVE_POS":
+			haveGtidSlavePos = true
+			out = append(out, &gtidSlavePos)
+		case "EXEC_MASTER_LOG_POS":
+			out = append(out, &execMasterLogPos)
+		default:
+			out = append(out, new(interface{}))
+		}
+	}
+	buffer, _ := NewSlaveDataBuffer(this)
+
+	for slaveData.Next() {
+		iterations++
+		if err := slaveData.Scan(out...); err != nil {
+			log.Fatalf(err.Error())
+		}
+
+		fmt.Fprintln(buffer, "Connection Name: ", connectionName)
+		fmt.Fprintln(buffer, "  Relay Master Log File: ", relayMasterLogFile)
+		fmt.Fprintln(buffer, "  Master Host: ", masterHost)
+		fmt.Fprintln(buffer, "  Master Port: ", masterPort)
+		fmt.Fprintln(buffer, "  Exec Master Log Pos: ", execMasterLogPos)
+		if haveExecutedGtidSet {
+			fmt.Fprintln(buffer, "  Executed GTID Set: ", executedGtidSet)
+		}
+		if haveGtidSlavePos {
+			fmt.Fprintln(buffer, "  GTID Slave Pos: ", gtidSlavePos)
+		}
+	}
+	buffer.Flush()
+	buffer.Close()
+
+	if iterations == 0 {
+		log.Fatalf("There is no slave information. Make sure that the server is acting as a slave server.")
+	}
+}
+
+func (this *TaskManager) getMasterData() {
 
 	log.Info("Getting Master Status")
 
@@ -162,7 +252,6 @@ func (this *TaskManager) getReplicationData() {
 	}
 	var out []interface{}
 	supportGTID := false
-	//File Position Binlog_Do_DB Binlog_Ignore_DB Executed_Gtid_Set
 
 	for i := 0; i < len(cols); i++ {
 		switch strings.ToUpper(cols[i]) {
@@ -180,17 +269,6 @@ func (this *TaskManager) getReplicationData() {
 		default:
 			log.Warningf("Unknown option \"%s\" on the Mastet Inforamtion. Please report this bug. MASTER DATA WILL NOT BE AVAILABLE!")
 		}
-
-	}
-	if supportGTID {
-		log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s\n Executed_Gtid_Set: %s ",
-			masterFile, masterPosition, binlogDoDb, binlogIgnoreDB, executedGTIDSet)
-	} else {
-		log.Debugf("Master data:\n File: %s\n Position: %d\n Binlog_Do_DB: %s\n Binlog_Ignore_DB: %s ",
-			masterFile, masterPosition, binlogDoDb, binlogIgnoreDB)
-	}
-	if err != nil {
-		log.Fatalf("%s", err.Error())
 	}
 
 	masterRows.Next()
@@ -201,9 +279,15 @@ func (this *TaskManager) getReplicationData() {
 	masterRows.Close()
 	buffer, _ := NewMasterDataBuffer(this)
 
-	fmt.Fprintf(buffer, fmt.Sprintf("Master File: %s\nMaster Position: %d\n", masterFile, masterPosition))
+	fmt.Fprintln(buffer, "Master File:", masterFile)
+	fmt.Fprintln(buffer, "Master Position: ", masterPosition)
+	fmt.Fprintln(buffer, "Binlog Do DB: ", binlogDoDb)
+	fmt.Fprintln(buffer, "Binlog Ignore DB: ", binlogIgnoreDB)
+	if supportGTID {
+		fmt.Fprintln(buffer, "Executed Gtid Set: ", executedGTIDSet)
+	}
 	buffer.Flush()
-
+	buffer.Close()
 }
 
 func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
@@ -244,7 +328,10 @@ func (this *TaskManager) GetTransactions(lockTables bool, allDatabases bool) {
 
 	// GET MASTER DATA
 	if this.GetMasterStatus {
-		this.getReplicationData()
+		this.getMasterData()
+	}
+	if this.GetSlaveStatus {
+		this.getSlaveData()
 	}
 
 	log.Debugf("Added %d transactions", len(this.workersDB))

@@ -21,6 +21,7 @@ type DumpOptions struct {
 	DestinationDir        string
 	AddDropTable          bool
 	GetMasterStatus       bool
+	GetSlaveStatus        bool
 	SkipUseDatabase       bool
 	Compress              bool
 	CompressLevel         int
@@ -141,7 +142,7 @@ func TablesFromDatabase(databasesParam string, db *sql.DB) map[string]bool {
 	return getTablesFromQuery(query, db)
 }
 
-func GetFlushTablesWithReadLockSQL() string {
+func GetLockAllTablesSQL() string {
 	return fmt.Sprintf("FLUSH TABLES WITH READ LOCK")
 }
 
@@ -179,11 +180,11 @@ func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB
 	} else {
 		hoststring = fmt.Sprintf("tcp(%s:%d)", host.HostName, host.Port)
 	}
-
+	log.Debugf(fmt.Sprintf("%s@%s/", userpass, hoststring))
 	db, err := sql.Open("mysql", fmt.Sprintf("%s@%s/", userpass, hoststring))
 	err = db.Ping()
 	if err != nil {
-		log.Fatal("MySQL connection error: %s", err.Error())
+		log.Fatalf("MySQL connection error: %s", err.Error())
 	}
 
 	return db, nil
