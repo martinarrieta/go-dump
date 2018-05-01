@@ -66,7 +66,7 @@ func (this *Task) CreateChunks(db *sql.DB) {
 			this.AddChunk(NewSingleDataChunk(this))
 			stopLoop = true
 		case "error":
-			log.Fatalf(`The table %s doesn't have any primary or unique key and the --tables-without-uniquekey is \"error\"`, this.Table.GetFullName())
+			log.Fatalf(`The table %s doesn't have any primary or unique key and the --tables-without-uniquekey is "error"`, this.Table.GetFullName())
 		}
 	}
 

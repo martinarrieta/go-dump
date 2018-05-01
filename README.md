@@ -23,7 +23,7 @@ go-dump uses the [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_c
 The parameters and options are listed here:
 
 ```
-Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--version] [--lock-tables] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--master-data] [--slave-data] [--output-chunk-size num] [--skip-use-database]
+Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--version] [--lock-tables] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--get-master-status] [--get-slave-status] [--output-chunk-size num] [--skip-use-database]
 
 go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory
 
@@ -58,8 +58,8 @@ Options description
 # Output options:
    --destination              Directory to store the dumps.
    --add-drop-table           Add drop table before create table. Default [false]
-   --master-data              Get the master data. Default [true]
-   --slave-data               Get the slave data. Default [false]
+   --get-master-status              Get the master data. Default [true]
+   --get-slave-status               Get the slave data. Default [false]
    --output-chunk-size        Chunk size to output the rows. Default [0]
    --skip-use-database        Skip USE "database" in the dump. Default [false]
 ```
