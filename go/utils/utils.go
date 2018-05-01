@@ -3,10 +3,12 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/outbrain/golib/log"
+	ini "gopkg.in/ini.v1"
 )
 
 type DumpOptions struct {
@@ -188,4 +190,110 @@ func GetMySQLConnection(host *MySQLHost, credentials *MySQLCredentials) (*sql.DB
 	}
 
 	return db, nil
+}
+
+func ParseIniFile(iniFile string, do *DumpOptions, flagSet map[string]bool) {
+	cfg, err := ini.Load(iniFile)
+	if err != nil {
+		log.Errorf("Failed to read the ini file %s: %s", iniFile, err.Error())
+	}
+
+	// Check the different sections in the ini file
+	for section := range cfg.Sections() {
+		cfg.Sections()[section].Name()
+		switch cfg.Sections()[section].Name() {
+		case "client", "mysqldump":
+			parseMySQLIniOptions(cfg.Sections()[section], do, flagSet)
+		case "go-dump":
+			parseIniOptions(cfg.Sections()[section], do, flagSet)
+		}
+	}
+}
+
+func parseMySQLIniOptions(section *ini.Section, do *DumpOptions, flagSet map[string]bool) {
+	var err error
+	for key := range section.Keys() {
+		if flagSet["mysql-"+section.Keys()[key].Name()] {
+			continue
+		}
+
+		switch section.Keys()[key].Name() {
+		case "user":
+			do.MySQLCredentials.User = section.Keys()[key].Value()
+		case "password":
+			do.MySQLCredentials.Password = section.Keys()[key].Value()
+		case "host":
+			do.MySQLHost.HostName = section.Keys()[key].Value()
+		case "port":
+			do.MySQLHost.Port, err = strconv.Atoi(section.Keys()[key].Value())
+			if err != nil {
+				log.Fatalf("Port number %s can not be converted to integer. Error: %s", section.Keys()[key].Value(), err.Error())
+			}
+		case "socket":
+			do.MySQLHost.SocketFile = section.Keys()[key].Value()
+		}
+	}
+}
+
+func parseIniOptions(section *ini.Section, do *DumpOptions, flagSet map[string]bool) {
+	var errInt, errBool error
+	for key := range section.Keys() {
+		if flagSet[section.Keys()[key].Name()] {
+			continue
+		}
+
+		switch section.Keys()[key].Name() {
+		case "mysql-user":
+			do.MySQLCredentials.User = section.Keys()[key].Value()
+		case "mysql-password":
+			do.MySQLCredentials.Password = section.Keys()[key].Value()
+		case "mysql-host":
+			do.MySQLHost.HostName = section.Keys()[key].Value()
+		case "mysql-port":
+			do.MySQLHost.Port, errInt = strconv.Atoi(section.Keys()[key].Value())
+		case "mysql-socket":
+			do.MySQLHost.SocketFile = section.Keys()[key].Value()
+		case "threads":
+			do.Threads, errInt = strconv.Atoi(section.Keys()[key].Value())
+		case "chunk-size":
+			do.ChunkSize, errInt = strconv.ParseUint(section.Keys()[key].Value(), 10, 64)
+		case "output-chunk-size":
+			do.OutputChunkSize, errInt = strconv.ParseUint(section.Keys()[key].Value(), 10, 64)
+		case "lock-tables":
+			do.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "tables-without-uniquekey":
+			do.TablesWithoutUKOption = section.Keys()[key].Value()
+		case "debug":
+			do.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "destination":
+			do.DestinationDir = section.Keys()[key].Value()
+		case "skip-use-database":
+			do.SkipUseDatabase, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "get-master-status":
+			do.GetMasterStatus, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "get-slave-status":
+			do.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "add-drop-table":
+			do.AddDropTable, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "compress":
+			do.Compress, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "compress-level":
+			do.CompressLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
+		case "isolation-level":
+			//dumpOptions.IsolationLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
+		case "consistent":
+			do.Consistent, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		default:
+			log.Warningf("Unknown option %s", section.Keys()[key].Name())
+		}
+
+		if errInt != nil {
+			log.Fatalf("Variable %s with the value %s can not be converted to integer. Error: %s",
+				section.Keys()[key].Name(), section.Keys()[key].Value(), errInt.Error())
+		}
+		if errBool != nil {
+			log.Fatalf("Variable %s with the value %s can not be converted to boolean. Error: %s",
+				section.Keys()[key].Name(), section.Keys()[key].Value(), errBool.Error())
+		}
+	}
 }

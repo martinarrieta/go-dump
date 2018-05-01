@@ -8,14 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"text/tabwriter"
 	"time"
-
-	"gopkg.in/ini.v1"
 
 	"github.com/martinarrieta/go-dump/go/utils"
 
@@ -80,98 +77,6 @@ func PrintUsage(flags map[string]*flag.Flag) {
 	w.Flush()
 }
 
-func parseMySQLIniOptions(section *ini.Section) {
-	var err error
-	for key := range section.Keys() {
-		if flagSet["mysql-"+section.Keys()[key].Name()] {
-			log.Debugf("Skip key %s", section.Keys()[key].Name())
-			continue
-		}
-		log.Debugf("Continue key %s", section.Keys()[key].Name())
-
-		switch section.Keys()[key].Name() {
-		case "user":
-			dumpOptions.MySQLCredentials.User = section.Keys()[key].Value()
-		case "password":
-			dumpOptions.MySQLCredentials.Password = section.Keys()[key].Value()
-		case "host":
-			dumpOptions.MySQLHost.HostName = section.Keys()[key].Value()
-		case "port":
-			dumpOptions.MySQLHost.Port, err = strconv.Atoi(section.Keys()[key].Value())
-			if err != nil {
-				log.Fatalf("Port number %s can not be converted to integer. Error: %s", section.Keys()[key].Value(), err.Error())
-			}
-		case "socket":
-			dumpOptions.MySQLHost.SocketFile = section.Keys()[key].Value()
-		}
-	}
-}
-
-func parseIniOptions(section *ini.Section) {
-	var errInt, errBool error
-	for key := range section.Keys() {
-		if flagSet[section.Keys()[key].Name()] {
-			log.Debugf("Skip key %s", section.Keys()[key].Name())
-			continue
-		}
-		log.Debugf("Continue key %s", section.Keys()[key].Name())
-
-		switch section.Keys()[key].Name() {
-		case "mysql-user":
-			dumpOptions.MySQLCredentials.User = section.Keys()[key].Value()
-		case "mysql-password":
-			dumpOptions.MySQLCredentials.Password = section.Keys()[key].Value()
-		case "mysql-host":
-			dumpOptions.MySQLHost.HostName = section.Keys()[key].Value()
-		case "mysql-port":
-			dumpOptions.MySQLHost.Port, errInt = strconv.Atoi(section.Keys()[key].Value())
-		case "mysql-socket":
-			dumpOptions.MySQLHost.SocketFile = section.Keys()[key].Value()
-		case "threads":
-			dumpOptions.Threads, errInt = strconv.Atoi(section.Keys()[key].Value())
-		case "chunk-size":
-			dumpOptions.ChunkSize, errInt = strconv.ParseUint(section.Keys()[key].Value(), 10, 64)
-		case "output-chunk-size":
-			dumpOptions.OutputChunkSize, errInt = strconv.ParseUint(section.Keys()[key].Value(), 10, 64)
-		case "lock-tables":
-			dumpOptions.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "tables-without-uniquekey":
-			dumpOptions.TablesWithoutUKOption = section.Keys()[key].Value()
-		case "debug":
-			dumpOptions.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "destination":
-			dumpOptions.DestinationDir = section.Keys()[key].Value()
-		case "skip-use-database":
-			dumpOptions.SkipUseDatabase, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "get-master-status":
-			dumpOptions.GetMasterStatus, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "get-slave-status":
-			dumpOptions.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "add-drop-table":
-			dumpOptions.AddDropTable, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "compress":
-			dumpOptions.Compress, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		case "compress-level":
-			dumpOptions.CompressLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
-		case "isolation-level":
-			//dumpOptions.IsolationLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
-		case "consistent":
-			dumpOptions.Consistent, errBool = strconv.ParseBool(section.Keys()[key].Value())
-		default:
-			log.Warningf("Unknown option %s", section.Keys()[key].Name())
-		}
-
-		if errInt != nil {
-			log.Fatalf("Variable %s with the value %s can not be converted to integer. Error: %s",
-				section.Keys()[key].Name(), section.Keys()[key].Value(), errInt.Error())
-		}
-		if errBool != nil {
-			log.Fatalf("Variable %s with the value %s can not be converted to boolean. Error: %s",
-				section.Keys()[key].Name(), section.Keys()[key].Value(), errBool.Error())
-		}
-	}
-}
-
 var dumpOptions = GetDumpOptions()
 var flagSet = make(map[string]bool)
 
@@ -225,21 +130,7 @@ func main() {
 
 	// Parse the ini file.
 	if flagIniFile != "" {
-		cfg, err := ini.Load(flagIniFile)
-		if err != nil {
-			os.Exit(1)
-		}
-
-		// Check the different sections in the ini file
-		for section := range cfg.Sections() {
-			cfg.Sections()[section].Name()
-			switch cfg.Sections()[section].Name() {
-			case "client", "mysqldump":
-				parseMySQLIniOptions(cfg.Sections()[section])
-			case "go-dump":
-				parseIniOptions(cfg.Sections()[section])
-			}
-		}
+		utils.ParseIniFile(flagIniFile, dumpOptions, flagSet)
 	}
 
 	flags := make(map[string]*flag.Flag)

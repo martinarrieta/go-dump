@@ -94,7 +94,19 @@ func NewChunkBuffer(c *DataChunk, workerId int) (*Buffer, error) {
 	bufferOptions := c.Task.TaskManager.GetBufferOptions()
 	bufferOptions.Path = fullpath
 
-	return NewBuffer(bufferOptions)
+	buffer, err := NewBuffer(bufferOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintf(buffer, "SET NAMES utf8;\n")
+	fmt.Fprintf(buffer, "SET MAX_ALLOWED_PACKET=1073741824;\n")
+	fmt.Fprintf(buffer, "SET TIME_ZONE='+00:00';\n")
+	fmt.Fprintf(buffer, "SET UNIQUE_CHECKS=0;\n")
+	fmt.Fprintf(buffer, "SET FOREIGN_KEY_CHECKS=0;\n")
+	fmt.Fprintf(buffer, "SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n")
+
+	return buffer, nil
 }
 
 func NewTableDefinitionBuffer(t *Task) (*Buffer, error) {

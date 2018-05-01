@@ -417,13 +417,6 @@ func (this *TaskManager) StartWorker(workerId int) {
 
 		buffer := bufferChunk[tablename]
 
-		fmt.Fprintf(buffer, "SET NAMES utf8;\n")
-		fmt.Fprintf(buffer, "SET MAX_ALLOWED_PACKET=1073741824;\n")
-		fmt.Fprintf(buffer, "SET TIME_ZONE='+00:00';\n")
-		fmt.Fprintf(buffer, "SET UNIQUE_CHECKS=0;\n")
-		fmt.Fprintf(buffer, "SET FOREIGN_KEY_CHECKS=0;\n")
-		fmt.Fprintf(buffer, "SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n")
-
 		if !chunk.Task.TaskManager.SkipUseDatabase {
 			fmt.Fprintf(buffer, "USE %s\n", chunk.Task.Table.GetSchema())
 		}
