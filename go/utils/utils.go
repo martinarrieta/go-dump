@@ -30,6 +30,12 @@ type DumpOptions struct {
 	VerboseLevel          int
 	IsolationLevel        sql.IsolationLevel
 	Consistent            bool
+	TemporalOptions       TemporalOptions
+}
+
+type TemporalOptions struct {
+	Tables, Databases, IsolationLevel           string
+	AllDatabases, Debug, DryRun, Execute, Quiet bool
 }
 
 type MySQLHost struct {
@@ -225,9 +231,11 @@ func parseMySQLIniOptions(section *ini.Section, do *DumpOptions, flagSet map[str
 		case "host":
 			do.MySQLHost.HostName = section.Keys()[key].Value()
 		case "port":
-			do.MySQLHost.Port, err = strconv.Atoi(section.Keys()[key].Value())
-			if err != nil {
-				log.Fatalf("Port number %s can not be converted to integer. Error: %s", section.Keys()[key].Value(), err.Error())
+			if section.Keys()[key].Value() != "" {
+				do.MySQLHost.Port, err = strconv.Atoi(section.Keys()[key].Value())
+				if err != nil {
+					log.Fatalf("Port number %s can not be converted to integer. Error: %s", section.Keys()[key].Value(), err.Error())
+				}
 			}
 		case "socket":
 			do.MySQLHost.SocketFile = section.Keys()[key].Value()
@@ -250,11 +258,15 @@ func parseIniOptions(section *ini.Section, do *DumpOptions, flagSet map[string]b
 		case "mysql-host":
 			do.MySQLHost.HostName = section.Keys()[key].Value()
 		case "mysql-port":
-			do.MySQLHost.Port, errInt = strconv.Atoi(section.Keys()[key].Value())
+			if section.Keys()[key].Value() != "" {
+				do.MySQLHost.Port, errInt = strconv.Atoi(section.Keys()[key].Value())
+			}
 		case "mysql-socket":
 			do.MySQLHost.SocketFile = section.Keys()[key].Value()
 		case "threads":
-			do.Threads, errInt = strconv.Atoi(section.Keys()[key].Value())
+			if section.Keys()[key].Value() != "" {
+				do.Threads, errInt = strconv.Atoi(section.Keys()[key].Value())
+			}
 		case "chunk-size":
 			do.ChunkSize, errInt = strconv.ParseUint(section.Keys()[key].Value(), 10, 64)
 		case "output-chunk-size":
@@ -263,8 +275,6 @@ func parseIniOptions(section *ini.Section, do *DumpOptions, flagSet map[string]b
 			do.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
 		case "tables-without-uniquekey":
 			do.TablesWithoutUKOption = section.Keys()[key].Value()
-		case "debug":
-			do.LockTables, errBool = strconv.ParseBool(section.Keys()[key].Value())
 		case "destination":
 			do.DestinationDir = section.Keys()[key].Value()
 		case "skip-use-database":
@@ -278,11 +288,27 @@ func parseIniOptions(section *ini.Section, do *DumpOptions, flagSet map[string]b
 		case "compress":
 			do.Compress, errBool = strconv.ParseBool(section.Keys()[key].Value())
 		case "compress-level":
-			do.CompressLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
-		case "isolation-level":
-			//dumpOptions.IsolationLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
+			if section.Keys()[key].Value() != "" {
+				do.CompressLevel, errInt = strconv.Atoi(section.Keys()[key].Value())
+			}
 		case "consistent":
 			do.Consistent, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "tables":
+			do.TemporalOptions.Tables = section.Keys()[key].Value()
+		case "databases":
+			do.TemporalOptions.Databases = section.Keys()[key].Value()
+		case "isolation-level":
+			do.TemporalOptions.IsolationLevel = section.Keys()[key].Value()
+		case "all-databases":
+			do.TemporalOptions.AllDatabases, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "debug":
+			do.TemporalOptions.Debug, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "dry-run":
+			do.TemporalOptions.DryRun, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "execute":
+			do.TemporalOptions.Execute, errBool = strconv.ParseBool(section.Keys()[key].Value())
+		case "quiet":
+			do.TemporalOptions.Quiet, errBool = strconv.ParseBool(section.Keys()[key].Value())
 		default:
 			log.Warningf("Unknown option %s", section.Keys()[key].Name())
 		}

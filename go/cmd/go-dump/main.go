@@ -84,16 +84,14 @@ func main() {
 	startExecution := time.Now()
 
 	var (
-		flagTables, flagDatabases, flagIsolationLevel, flagIniFile string
-		flagHelp, flagVersion, flagDryRun                          bool
-		flagExecute, flagAllDatabases                              bool
-		flagAddDropTable, flagQuiet, flagDebug                     bool
+		flagHelp, flagVersion bool
+		flagIniFile           string
 	)
 
 	var consitent = true
-	flag.StringVar(&flagTables, "tables", "", "List of comma separated tables to dump. Each table should have the database name included, for example \"mydb.mytable,mydb2.mytable2\".")
-	flag.StringVar(&flagDatabases, "databases", "", "List of comma separated databases to dump.")
-	flag.BoolVar(&flagAllDatabases, "all-databases", false, "Dump all the databases.")
+	flag.StringVar(&dumpOptions.TemporalOptions.Tables, "tables", "", "List of comma separated tables to dump. Each table should have the database name included, for example \"mydb.mytable,mydb2.mytable2\".")
+	flag.StringVar(&dumpOptions.TemporalOptions.Databases, "databases", "", "List of comma separated databases to dump.")
+	flag.BoolVar(&dumpOptions.TemporalOptions.AllDatabases, "all-databases", false, "Dump all the databases.")
 	flag.StringVar(&dumpOptions.MySQLHost.HostName, "mysql-host", "localhost", "MySQL hostname.")
 	flag.StringVar(&dumpOptions.MySQLHost.SocketFile, "mysql-socket", "", "MySQL socket file.")
 	flag.IntVar(&dumpOptions.MySQLHost.Port, "mysql-port", 3306, "MySQL port number")
@@ -105,12 +103,12 @@ func main() {
 	flag.IntVar(&dumpOptions.ChannelBufferSize, "channel-buffer-size", 1000, "Task channel buffer size.")
 	flag.BoolVar(&dumpOptions.LockTables, "lock-tables", true, "Lock tables to get consistent backup.")
 	flag.StringVar(&dumpOptions.TablesWithoutUKOption, "tables-without-uniquekey", "error", "Action to have with tables without any primary or unique key. Valid actions are: 'error', 'single-chunk'.")
-	flag.BoolVar(&flagDebug, "debug", false, "Display debug information.")
+	flag.BoolVar(&dumpOptions.TemporalOptions.Debug, "debug", false, "Display debug information.")
 	flag.StringVar(&dumpOptions.DestinationDir, "destination", "", "Directory to store the dumps.")
 	flag.BoolVar(&flagHelp, "help", false, "Display this message.")
 	flag.BoolVar(&flagVersion, "version", false, "Display version and exit.")
-	flag.BoolVar(&flagDryRun, "dry-run", false, "Just calculate the number of chaunks per table and display it.")
-	flag.BoolVar(&flagExecute, "execute", false, "Execute the dump.")
+	flag.BoolVar(&dumpOptions.TemporalOptions.DryRun, "dry-run", false, "Just calculate the number of chaunks per table and display it.")
+	flag.BoolVar(&dumpOptions.TemporalOptions.Execute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
 	flag.BoolVar(&dumpOptions.GetMasterStatus, "get-master-status", true, "Get the master data.")
 	flag.BoolVar(&dumpOptions.GetSlaveStatus, "get-slave-status", false, "Get the slave data.")
@@ -118,8 +116,8 @@ func main() {
 	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
-	flag.BoolVar(&flagQuiet, "quiet", false, "Do not display INFO messages during the process.")
-	flag.StringVar(&flagIsolationLevel, "isolation-level", "REPEATABLE READ", "Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
+	flag.BoolVar(&dumpOptions.TemporalOptions.Quiet, "quiet", false, "Do not display INFO messages during the process.")
+	flag.StringVar(&dumpOptions.TemporalOptions.IsolationLevel, "isolation-level", "REPEATABLE READ", "Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
 	flag.BoolVar(&dumpOptions.Consistent, "consistent", true, "Get a consistent backup.")
 	flag.StringVar(&flagIniFile, "ini-file", "", "INI file to read the configuration options.")
 
@@ -152,9 +150,9 @@ func main() {
 	}
 
 	//Setting debug level
-	if flagDebug {
+	if dumpOptions.TemporalOptions.Debug {
 		log.SetLevel(log.DEBUG)
-	} else if flagQuiet {
+	} else if dumpOptions.TemporalOptions.Quiet {
 		log.SetLevel(log.WARNING)
 	} else {
 		log.SetLevel(log.INFO)
@@ -191,7 +189,7 @@ func main() {
 	}
 
 	// Parsed isolation level.
-	switch strings.ToUpper(flagIsolationLevel) {
+	switch strings.ToUpper(dumpOptions.TemporalOptions.IsolationLevel) {
 	case "SERIALIZABLE":
 		dumpOptions.IsolationLevel = sql.LevelSerializable
 	case "REPEATABLE READ":
@@ -203,7 +201,7 @@ func main() {
 		dumpOptions.IsolationLevel = sql.LevelReadUncommitted
 		consitent = false
 	default:
-		log.Fatalf("Unknown issolation level %s. Use --help for more information.", flagIsolationLevel)
+		log.Fatalf("Unknown issolation level %s. Use --help for more information.", dumpOptions.TemporalOptions.IsolationLevel)
 	}
 
 	// Parsed consistent and making sure taht the isolation level is correct.
@@ -255,16 +253,16 @@ func main() {
 	}
 	log.Debug("Error TablesFromDatabase: ", err)
 
-	if flagAllDatabases {
+	if dumpOptions.TemporalOptions.AllDatabases {
 		tablesToParse = utils.TablesFromAllDatabases(dbchunks)
 	} else {
-		if len(flagDatabases) > 0 {
-			tablesFromDatabases = utils.TablesFromDatabase(flagDatabases, dbchunks)
+		if len(dumpOptions.TemporalOptions.Databases) > 0 {
+			tablesFromDatabases = utils.TablesFromDatabase(dumpOptions.TemporalOptions.Databases, dbchunks)
 			log.Debugf("tablesFromDatabases: %v ", tablesFromDatabases)
 		}
 
-		if len(flagTables) > 0 {
-			tablesFromString = utils.TablesFromString(flagTables)
+		if len(dumpOptions.TemporalOptions.Tables) > 0 {
+			tablesFromString = utils.TablesFromString(dumpOptions.TemporalOptions.Tables)
 		}
 
 		// Merging both lists (tables and databases)
@@ -307,32 +305,32 @@ func main() {
 
 	go taskManager.CreateChunks(dbchunks)
 
-	if flagDryRun && flagExecute {
+	if dumpOptions.TemporalOptions.DryRun && dumpOptions.TemporalOptions.Execute {
 		log.Fatalf("Flags --dry-run and --execute are mutually exclusive")
 
 	}
 	go taskManager.PrintStatus()
 
-	if flagDryRun {
+	if dumpOptions.TemporalOptions.DryRun {
 		go taskManager.CleanChunkChannel()
 		taskManager.CreateChunksWaitGroup.Wait()
 		close(taskManager.ChunksChannel)
 		taskManager.DisplaySummary()
 	}
 
-	if flagExecute {
+	if dumpOptions.TemporalOptions.Execute {
 		if err := os.MkdirAll(dumpOptions.DestinationDir, 0755); err != nil {
 			log.Fatalf("Error creating directory: %s\n%s",
 				dumpOptions.DestinationDir, err.Error())
 		}
-		taskManager.GetTransactions(dumpOptions.LockTables, flagAllDatabases)
+		taskManager.GetTransactions(dumpOptions.LockTables, dumpOptions.TemporalOptions.AllDatabases)
 
 		taskManager.StartWorkers()
 		log.Debugf("ProcessChunksWaitGroup, %+v", taskManager.ProcessChunksWaitGroup)
 		taskManager.CreateChunksWaitGroup.Wait()
 		close(taskManager.ChunksChannel)
 		taskManager.ProcessChunksWaitGroup.Wait()
-		taskManager.WriteTablesSQL(flagAddDropTable)
+		taskManager.WriteTablesSQL(dumpOptions.AddDropTable)
 		log.Info("Waiting for the creation of all the chunks.")
 	}
 
