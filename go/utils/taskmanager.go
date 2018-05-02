@@ -33,7 +33,6 @@ func NewTaskManager(
 		GetSlaveStatus:         dumpOptions.GetSlaveStatus,
 		Compress:               dumpOptions.Compress,
 		CompressLevel:          dumpOptions.CompressLevel,
-		VerboseLevel:           dumpOptions.VerboseLevel,
 		IsolationLevel:         dumpOptions.IsolationLevel,
 		mySQLHost:              dumpOptions.MySQLHost,
 		mySQLCredentials:       dumpOptions.MySQLCredentials}
@@ -59,7 +58,6 @@ type TaskManager struct {
 	GetSlaveStatus         bool
 	Compress               bool
 	CompressLevel          int
-	VerboseLevel           int
 	IsolationLevel         sql.IsolationLevel
 	mySQLHost              *MySQLHost
 	mySQLCredentials       *MySQLCredentials

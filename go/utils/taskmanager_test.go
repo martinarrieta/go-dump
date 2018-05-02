@@ -39,7 +39,6 @@ func getDumpOptions() *DumpOptions {
 		SkipUseDatabase:       false,
 		Compress:              false,
 		CompressLevel:         0,
-		VerboseLevel:          0,
 		IsolationLevel:        sql.LevelRepeatableRead,
 		Consistent:            true,
 	}

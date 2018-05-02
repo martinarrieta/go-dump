@@ -27,7 +27,6 @@ type DumpOptions struct {
 	SkipUseDatabase       bool
 	Compress              bool
 	CompressLevel         int
-	VerboseLevel          int
 	IsolationLevel        sql.IsolationLevel
 	Consistent            bool
 	TemporalOptions       TemporalOptions

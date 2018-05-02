@@ -130,6 +130,8 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, buffer *Buffer) error {
 				buffer.Write([]byte("NULL"))
 			case time.Time:
 				fmt.Fprintf(buffer, "%s", d)
+			case float64:
+				fmt.Fprintf(buffer, "%g", d)
 			default:
 				buffer.Write(d.([]byte))
 			}

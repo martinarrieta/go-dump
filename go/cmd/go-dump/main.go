@@ -48,7 +48,7 @@ func printOption(w io.Writer, f *flag.Flag) {
 func PrintUsage(flags map[string]*flag.Flag) {
 
 	w := tabwriter.NewWriter(os.Stdout, 30, 0, 1, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables] [--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--get-master-status] [--get-slave-status] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level]")
+	fmt.Fprintln(w, "Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables] [--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--get-master-status] [--get-slave-status] [--output-chunk-size num] [--skip-use-database] [--compress] [--compress-level] [--ini-files str]")
 
 	fmt.Fprintln(w, "go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory")
 	fmt.Fprint(w, "Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password\n\n")
@@ -57,7 +57,7 @@ func PrintUsage(flags map[string]*flag.Flag) {
 	fmt.Fprintln(w, "# General:")
 	for _, opt := range []string{"help", "dry-run", "execute", "debug", "quiet", "version",
 		"lock-tables", "channel-buffer-size", "chunk-size", "tables-without-uniquekey",
-		"threads", "compress", "compress-level"} {
+		"threads", "compress", "compress-level", "consistent", "isolation-level", "ini-file"} {
 		printOption(w, flags[opt])
 	}
 
@@ -115,7 +115,6 @@ func main() {
 	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
 	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")
 	flag.IntVar(&dumpOptions.CompressLevel, "compress-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
-	flag.IntVar(&dumpOptions.VerboseLevel, "verbose-level", 1, "Compression level from 1 (best speed) to 9 (best compression).")
 	flag.BoolVar(&dumpOptions.TemporalOptions.Quiet, "quiet", false, "Do not display INFO messages during the process.")
 	flag.StringVar(&dumpOptions.TemporalOptions.IsolationLevel, "isolation-level", "REPEATABLE READ", "Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE.")
 	flag.BoolVar(&dumpOptions.Consistent, "consistent", true, "Get a consistent backup.")

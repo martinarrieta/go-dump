@@ -23,10 +23,16 @@ go-dump uses the [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_c
 The parameters and options are listed here:
 
 ```
-Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases] [--dry-run | --execute ] [--help] [--debug] [--version] [--lock-tables] [--channel-buffer-size num] [--chunk-size num] [--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str] [--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table] [--get-master-status] [--get-slave-status] [--output-chunk-size num] [--skip-use-database]
+Usage: go-dump  --destination path [--databases str] [--tables str] [--all-databases]
+[--dry-run | --execute ] [--help] [--debug] [--quiet] [--version] [--lock-tables]
+[--consistent] [--isolation-level str] [--channel-buffer-size num] [--chunk-size num]
+[--tables-without-uniquekey str] [--threads num] [--mysql-user str] [--mysql-password str]
+[--mysql-host str] [--mysql-port num] [--mysql-socket path] [--add-drop-table]
+[--get-master-status] [--get-slave-status] [--output-chunk-size num] [--skip-use-database]
+[--compress] [--compress-level] [--ini-files str]
 
-go-dump dumps a database or a table from a MySQL server and creates the SQL statements to recreate a table. This tool create one file per table per thread in the destination directory
-
+go-dump dumps a database or a table from a MySQL server and creates the SQL statements
+to recreate a table. This tool create one file per table per thread in the destination directory
 Example: go-dump --destination /tmp/dbdump --databases mydb --mysql-user myuser --mysql-password password
 
 Options description
@@ -36,12 +42,18 @@ Options description
    --dry-run                  Just calculate the number of chaunks per table and display it. Default [false]
    --execute                  Execute the dump. Default [false]
    --debug                    Display debug information. Default [false]
+   --quiet                    Do not display INFO messages during the process. Default [false]
    --version                  Display version and exit. Default [false]
    --lock-tables              Lock tables to get consistent backup. Default [true]
    --channel-buffer-size      Task channel buffer size. Default [1000]
    --chunk-size               Chunk size to get the rows. Default [1000]
    --tables-without-uniquekey Action to have with tables without any primary or unique key. Valid actions are: 'error', 'single-chunk'. Default [error]
    --threads                  Number of threads to use. Default [1]
+   --compress                 Enable compression to the output files. Default [false]
+   --compress-level           Compression level from 1 (best speed) to 9 (best compression). Default [1]
+   --consistent               Get a consistent backup. Default [true]
+   --isolation-level          Isolation level to use. If you need a consitent backup, leave the default 'REPEATABLE READ', other options READ COMMITTED, READ UNCOMMITTED and SERIALIZABLE. Default [REPEATABLE READ]
+   --ini-file                 INI file to read the configuration options.
 
 # MySQL options:
    --mysql-user               MySQL user name. Default [root]
@@ -53,13 +65,13 @@ Options description
 # Databases or tables to dump:
    --all-databases            Dump all the databases. Default [false]
    --databases                List of comma separated databases to dump.
-   --tables                   List of comma separated tables to dump. Each table should have the database name included,for example "mydb.mytable,mydb2.mytable2".
+   --tables                   List of comma separated tables to dump. Each table should have the database name included, for example "mydb.mytable,mydb2.mytable2".
 
 # Output options:
    --destination              Directory to store the dumps.
    --add-drop-table           Add drop table before create table. Default [false]
-   --get-master-status              Get the master data. Default [true]
-   --get-slave-status               Get the slave data. Default [false]
+   --get-master-status        Get the master data. Default [true]
+   --get-slave-status         Get the slave data. Default [false]
    --output-chunk-size        Chunk size to output the rows. Default [0]
    --skip-use-database        Skip USE "database" in the dump. Default [false]
 ```
