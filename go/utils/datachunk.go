@@ -72,9 +72,6 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, buffer *Buffer) error {
 
 	tablename := this.Task.Table.GetFullName()
 
-	//r := sqlutils.NewRowsParser(rows, this.Task.Table)
-	//buffer := bufio.NewWriter(file)
-
 	if this.IsSingleChunk {
 		fmt.Fprintf(buffer, "-- Single chunk on %s\n", tablename)
 	} else {
@@ -90,14 +87,15 @@ func (this *DataChunk) Parse(stmt *sql.Stmt, buffer *Buffer) error {
 	}
 	firstRow := true
 
-	var rowsNumber = uint64(0)
+	//var rowsNumber = uint64(0)
 	for rows.Next() {
 
-		if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {
-			fmt.Fprintf(buffer, ");\n\n")
-
-			firstRow = true
-		}
+		/*
+			if rowsNumber > 0 && rowsNumber%this.Task.OutputChunkSize == 0 {
+				fmt.Fprintf(buffer, ");\n\n")
+				firstRow = true
+			}
+		*/
 
 		if firstRow {
 			fmt.Fprintf(buffer, "INSERT INTO %s VALUES \n(", this.Task.Table.GetName())

@@ -28,6 +28,10 @@ func (this *Task) AddChunk(chunk DataChunk) {
 	log.Debugf("Queue +1: %d ", this.TaskManager.Queue)
 }
 
+func (this *Task) GetSingleChunkTestQuery() string {
+	return fmt.Sprintf("SELECT 1 FROM %s LIMIT 1 ", this.Table.GetFullName())
+}
+
 func (this *Task) GetChunkSqlQuery() string {
 	keyForChunks := this.Table.GetPrimaryOrUniqueKey()
 
@@ -63,8 +67,16 @@ func (this *Task) CreateChunks(db *sql.DB) {
 		switch this.TaskManager.TablesWithoutPKOption {
 		case "single-chunk":
 			log.Debugf(`Table %s doesn't have any primary or unique key, we will make it in a single chunk.`, this.Table.GetFullName())
-			this.AddChunk(NewSingleDataChunk(this))
-			stopLoop = true
+			err := tx.QueryRow(this.GetSingleChunkTestQuery()).Scan(&chunkMax)
+			switch err {
+			case nil:
+				this.AddChunk(NewSingleDataChunk(this))
+			case sql.ErrNoRows:
+				return
+			default:
+				log.Errorf("Error getting rows for table '%s'", this.Table.GetUnescapedFullName())
+			}
+			return
 		case "error":
 			log.Fatalf(`The table %s doesn't have any primary or unique key and the --tables-without-uniquekey is "error"`, this.Table.GetFullName())
 		}

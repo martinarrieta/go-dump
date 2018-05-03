@@ -110,7 +110,7 @@ func main() {
 	flag.BoolVar(&dumpOptions.TemporalOptions.DryRun, "dry-run", false, "Just calculate the number of chaunks per table and display it.")
 	flag.BoolVar(&dumpOptions.TemporalOptions.Execute, "execute", false, "Execute the dump.")
 	flag.BoolVar(&dumpOptions.SkipUseDatabase, "skip-use-database", false, "Skip USE \"database\" in the dump.")
-	flag.BoolVar(&dumpOptions.GetMasterStatus, "get-master-status", true, "Get the master data.")
+	flag.BoolVar(&dumpOptions.GetMasterStatus, "get-master-status", false, "Get the master data.")
 	flag.BoolVar(&dumpOptions.GetSlaveStatus, "get-slave-status", false, "Get the slave data.")
 	flag.BoolVar(&dumpOptions.AddDropTable, "add-drop-table", false, "Add drop table before create table.")
 	flag.BoolVar(&dumpOptions.Compress, "compress", false, "Enable compression to the output files.")

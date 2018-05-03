@@ -100,7 +100,7 @@ func NewChunkBuffer(c *DataChunk, workerId int) (*Buffer, error) {
 	}
 
 	fmt.Fprintf(buffer, "SET NAMES utf8;\n")
-	fmt.Fprintf(buffer, "SET MAX_ALLOWED_PACKET=1073741824;\n")
+	fmt.Fprintf(buffer, "SET GLOBAL MAX_ALLOWED_PACKET=1073741824;\n")
 	fmt.Fprintf(buffer, "SET TIME_ZONE='+00:00';\n")
 	fmt.Fprintf(buffer, "SET UNIQUE_CHECKS=0;\n")
 	fmt.Fprintf(buffer, "SET FOREIGN_KEY_CHECKS=0;\n")
