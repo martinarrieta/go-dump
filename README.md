@@ -12,12 +12,6 @@ You can either dump a database or multiple databases or a table or multiple tabl
 
 go-dump uses the [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) capabilities from the storage engines (currently only [InnoDB](https://dev.mysql.com/doc/refman/5.7/en/innodb-multi-versioning.html)) to get a consistent state of a backup. The concept is very similar to [mydumper](https://github.com/maxbube/mydumper) but with some extra features that I found useful.
 
-## Pending
-
-* Store the slave position if to get the master information. AKA [--dump-slave](https://dev.mysql.com/doc/refman/5.7/en/mysqldump.html#option_mysqldump_dump-slave) from mysqldump.
-* Make tests
-* Make more tests
-
 ## Usage
 
 The parameters and options are listed here:
@@ -75,6 +69,9 @@ Options description
    --output-chunk-size        Chunk size to output the rows. Default [0]
    --skip-use-database        Skip USE "database" in the dump. Default [false]
 ```
+## Download
+
+Each release build binaries. You can check the last release [here](https://github.com/martinarrieta/go-dump/releases) and get it.
 
 ## Examples
 
@@ -97,7 +94,7 @@ Master Position: 154
 
 Explanation of this command:
 
-This command will execute 8 threads, it will create chunks of 50000 rows and it will write in chunks of 1000 rows, the buffer for the chunks it will be 2000 and the tables without a primary or unique key will be done in a single chunk. It will add the drop table command and the database that it will backup it is "test". The user to connect to the mysql database is "root" and the dastination directory is "/tmp/testbackup". We want to execute the backup and we don't want to add the "USE DATABASE" command on each file.
+This command will execute 8 threads `--threads 8`, it will read in chunks of 50000 rows `--chunk-size 50000` and it will write in chunks of 1000 rows --output-chunk-size 1000, the buffer for the chunks it will be 2000 `--channel-buffer-size  2000` and the tables without a primary or unique key will be done in a single chunk `--tables-without-uniquekey "single-chunk"`. It will add the drop table command `--add-drop-table` and the database that it will backup it is "test" `--databases "test"`. The user to connect to the mysql database is "root" `--mysql-user root` and the dastination directory is "/tmp/testbackup" `--destination /tmp/testbackup`. We want to execute `--execute` the backup and we don't want to add the "USE DATABASE" command on each file `--skip-use-database`.
 
 ## Focus of this project
 

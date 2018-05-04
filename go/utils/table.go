@@ -1,30 +1,33 @@
 package utils
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/outbrain/golib/log"
-
-	"database/sql"
 )
 
 type ColumnsMap map[string]int
 
+// Table contains the name and type of a table.
 type Table struct {
 	name            string
 	schema          string
 	primaryKey      []string
 	uniqueKey       []string
 	keyForChunks    string
-	CreateTableSQL  string
-	IsLocked        bool
-	Engine          string
-	Collation       string
 	estNumberOfRows uint64
 	estDataSize     uint64
 	estIndexSize    uint64
+
+	CreateTableSQL string
+	IsLocked       bool
+	Engine         string
+	Collation      string
 }
 
+// getColumnsInformationSQL return the SQL statment to get the columns
+// information of a table
 func (this *Table) getColumnsInformationSQL() string {
 	return fmt.Sprintf(`SELECT COLUMN_NAME,COLUMN_KEY
 		FROM INFORMATION_SCHEMA.COLUMNS
@@ -58,30 +61,39 @@ CREATE_OPTIONS:
  TABLE_COMMENT:
 */
 
+// GetFullName return a string with database and table name escaped.
 func (this *Table) GetFullName() string {
 	return fmt.Sprintf("`%s`.`%s`", this.schema, this.name)
 }
 
+// GetSchema return a string with the database name escaped.
 func (this *Table) GetSchema() string {
 	return fmt.Sprintf("`%s`", this.schema)
 }
 
+// GetName return a string with the table name escaped.
 func (this *Table) GetName() string {
 	return fmt.Sprintf("`%s`", this.name)
 }
 
+// GetUnescapedSchema return a string with the database name.
 func (this *Table) GetUnescapedSchema() string {
 	return fmt.Sprintf("%s", this.schema)
 }
 
+// GetUnescapedName return a string with the table name.
 func (this *Table) GetUnescapedName() string {
 	return fmt.Sprintf("%s", this.name)
 }
 
+// GetUnescapedFullName return a string with database and table name.
 func (this *Table) GetUnescapedFullName() string {
 	return fmt.Sprintf("%s.%s", this.schema, this.name)
 }
 
+// GetPrimaryOrUniqueKey return a string with the name of the unique or primary
+// key filed that we will use to split the table.
+// Empty string means that the table doens't have any primary or unique key to use.
 func (this *Table) GetPrimaryOrUniqueKey() string {
 
 	if len(this.keyForChunks) > 0 {
@@ -101,6 +113,7 @@ func (this *Table) GetPrimaryOrUniqueKey() string {
 	return ""
 }
 
+// getTableInformation collect and store the table information
 func (this *Table) getTableInformation(db *sql.DB) error {
 
 	var tableName string
@@ -118,6 +131,7 @@ func (this *Table) getTableInformation(db *sql.DB) error {
 	return err
 }
 
+// getData collect the table information
 func (this *Table) getData(db *sql.DB) error {
 
 	this.getTableInformation(db)
@@ -144,6 +158,7 @@ func (this *Table) getData(db *sql.DB) error {
 	return nil
 }
 
+// NewTable create a new Table object.
 func NewTable(schema string, name string, db *sql.DB) *Table {
 	table := &Table{
 		name:     name,
