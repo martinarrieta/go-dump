@@ -46,8 +46,6 @@ func getDumpOptions() *DumpOptions {
 
 var dumpOptions = getDumpOptions()
 
-var tmdb, _ = GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
-
 // Creating the buffer for the channel
 var cDataChunk = make(chan DataChunk, dumpOptions.ChannelBufferSize)
 
@@ -61,7 +59,6 @@ var taskManager = NewTaskManager(
 	&wgCreateChunks,
 	&wgProcessChunks,
 	cDataChunk,
-	tmdb,
 	dumpOptions)
 
 func TestCreateTaskManager(t *testing.T) {

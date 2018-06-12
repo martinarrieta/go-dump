@@ -230,22 +230,17 @@ func main() {
 	// Setting up the concurrency to use.
 	runtime.GOMAXPROCS(dumpOptions.Threads)
 
-	tmdb, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
-	if err != nil {
-		log.Critical("Error whith the database connection. %s", err.Error())
-	}
 	// Creating the Task Manager.
 	taskManager := utils.NewTaskManager(
 		&wgCreateChunks,
 		&wgProcessChunks,
 		cDataChunk,
-		tmdb,
 		dumpOptions)
 
 	// Making the lists of tables. Either from a database or the tables paramenter.
 	var tablesFromDatabases, tablesFromString, tablesToParse map[string]bool
 
-	dbchunks, err := utils.GetMySQLConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+	dbchunks, err := taskManager.GetDBConnection()
 
 	if err != nil {
 		log.Critical("Error whith the database connection. %s", err.Error())
@@ -253,10 +248,10 @@ func main() {
 	log.Debug("Error TablesFromDatabase: ", err)
 
 	if dumpOptions.TemporalOptions.AllDatabases {
-		tablesToParse = utils.TablesFromAllDatabases(dbchunks)
+		tablesToParse = taskManager.GetTablesFromAllDatabases()
 	} else {
 		if len(dumpOptions.TemporalOptions.Databases) > 0 {
-			tablesFromDatabases = utils.TablesFromDatabase(dumpOptions.TemporalOptions.Databases, dbchunks)
+			tablesFromDatabases = taskManager.GetTablesFromDatabase(dumpOptions.TemporalOptions.Databases)
 			log.Debugf("tablesFromDatabases: %v ", tablesFromDatabases)
 		}
 

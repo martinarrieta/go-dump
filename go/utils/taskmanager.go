@@ -16,14 +16,21 @@ func NewTaskManager(
 	wgC *sync.WaitGroup,
 	wgP *sync.WaitGroup,
 	cDC chan DataChunk,
-	db *sql.DB,
 	dumpOptions *DumpOptions) TaskManager {
+
+	dbtype := NewMySQLBase()
+	db, err := dbtype.GetDBConnection(dumpOptions.MySQLHost, dumpOptions.MySQLCredentials)
+
+	if err != nil {
+		log.Critical("Error whith the database connection. %s", err.Error())
+	}
 
 	tm := TaskManager{
 		CreateChunksWaitGroup:  wgC,
 		ProcessChunksWaitGroup: wgP,
 		ChunksChannel:          cDC,
 		DB:                     db,
+		dbtype:                 dbtype,
 		databaseEngines:        make(map[string]*Table),
 		ThreadsCount:           dumpOptions.Threads,
 		DestinationDir:         dumpOptions.DestinationDir,
@@ -44,6 +51,7 @@ type TaskManager struct {
 	ProcessChunksWaitGroup *sync.WaitGroup //Create Chunks WaitGroup
 	ChunksChannel          chan DataChunk
 	DB                     *sql.DB
+	dbtype                 DBBase
 	ThreadsCount           int
 	tasksPool              []*Task
 	workersTx              []*sql.Tx
@@ -88,10 +96,21 @@ func (this *TaskManager) GetTasksPool() []*Task {
 	return this.tasksPool
 }
 
+func (this *TaskManager) GetDBConnection() (*sql.DB, error) {
+	return this.dbtype.GetDBConnection(this.mySQLHost, this.mySQLCredentials)
+}
+func (taskManager *TaskManager) GetTablesFromAllDatabases() map[string]bool {
+	return taskManager.dbtype.GetTablesFromAllDatabases(taskManager.DB)
+}
+
+func (taskManager *TaskManager) GetTablesFromDatabase(databaseParam string) map[string]bool {
+	return taskManager.dbtype.GetTablesFromDatabase(databaseParam, taskManager.DB)
+}
+
 func (this *TaskManager) AddWorkersDB() {
 	for i := 0; i < this.ThreadsCount; i++ {
 
-		conn, err := GetMySQLConnection(this.mySQLHost, this.mySQLCredentials)
+		conn, err := this.dbtype.GetDBConnection(this.mySQLHost, this.mySQLCredentials)
 		if err != nil {
 			log.Critical("Error whith the database connection. %s", err.Error())
 		}
@@ -107,7 +126,7 @@ func (this *TaskManager) AddWorkerDB(db *sql.DB) {
 }
 
 func (this *TaskManager) lockTables() {
-	query := GetLockTablesSQL(this.tasksPool, "READ")
+	query := this.dbtype.GetLockTablesSQL(this.tasksPool, "READ")
 
 	if _, err := this.DB.Exec(query); err != nil {
 		log.Criticalf("Error unlocking the tables: %s", err.Error())
@@ -122,7 +141,7 @@ func (this *TaskManager) unlockTables() {
 }
 
 func (this *TaskManager) lockAllTables() {
-	query := GetLockAllTablesSQL()
+	query := this.dbtype.GetLockAllTablesSQL()
 	if _, err := this.DB.Exec(query); err != nil {
 		log.Fatalf("Error locking table: %s", err.Error())
 	}
@@ -239,7 +258,7 @@ func (this *TaskManager) getMasterData() {
 	var masterFile, binlogDoDb, binlogIgnoreDB, executedGTIDSet string
 	var masterPosition int
 
-	masterRows, err := this.DB.Query(GetMasterStatusSQL())
+	masterRows, err := this.DB.Query(this.dbtype.GetMasterStatusSQL())
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}
@@ -293,14 +312,14 @@ func (this *TaskManager) WriteTablesSQL(addDropTable bool) {
 		buffer, _ := NewTableDefinitionBuffer(task)
 
 		if !this.SkipUseDatabase {
-			fmt.Fprintf(buffer, GetUseDatabaseSQL(task.Table.GetSchema())+";\n")
+			fmt.Fprintf(buffer, this.dbtype.GetUseDatabaseSQL(task.Table.GetSchema())+";\n")
 		}
 
 		fmt.Fprintf(buffer, "/*!40101 SET NAMES binary*/;\n")
 		fmt.Fprintf(buffer, "/*!40014 SET FOREIGN_KEY_CHECKS=0*/;\n")
 
 		if addDropTable {
-			fmt.Fprintf(buffer, GetDropTableIfExistSQL(task.Table.GetName())+";\n")
+			fmt.Fprintf(buffer, this.dbtype.GetDropTableIfExistSQL(task.Table.GetName())+";\n")
 		}
 
 		fmt.Fprintf(buffer, task.Table.CreateTableSQL+";\n")
